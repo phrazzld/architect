@@ -117,7 +117,7 @@ func (s *registryAPIService) InitLLMClient(ctx context.Context, apiKey, modelNam
 		}
 
 		// Check if it's an OpenAI API error
-		if apiErr, ok := openai.IsAPIError(err); ok {
+		if apiErr, ok := openai.IsOpenAIError(err); ok {
 			return nil, fmt.Errorf("%w: %s", ErrClientInitialization, apiErr.UserFacingError())
 		}
 
@@ -227,7 +227,7 @@ func (s *registryAPIService) createLLMClientFallback(ctx context.Context, apiKey
 		}
 
 		// Check if it's an OpenAI API error
-		if apiErr, ok := openai.IsAPIError(err); ok {
+		if apiErr, ok := openai.IsOpenAIError(err); ok {
 			return nil, fmt.Errorf("%w: %s", ErrClientInitialization, apiErr.UserFacingError())
 		}
 
@@ -520,7 +520,7 @@ func (s *registryAPIService) GetErrorDetails(err error) string {
 	}
 
 	// Check if it's an OpenAI API error with enhanced details
-	if apiErr, ok := openai.IsAPIError(err); ok {
+	if apiErr, ok := openai.IsOpenAIError(err); ok {
 		return apiErr.UserFacingError()
 	}
 

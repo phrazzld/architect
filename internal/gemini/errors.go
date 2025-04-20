@@ -10,285 +10,182 @@ import (
 	"github.com/phrazzld/architect/internal/llm"
 )
 
-// ErrorType represents different categories of errors that can occur when using the Gemini API
-type ErrorType int
-
-const (
-	// ErrorTypeUnknown represents an unknown or uncategorized error
-	ErrorTypeUnknown ErrorType = iota
-
-	// ErrorTypeAuth represents authentication and authorization errors
-	ErrorTypeAuth
-
-	// ErrorTypeRateLimit represents rate limiting or quota errors
-	ErrorTypeRateLimit
-
-	// ErrorTypeInvalidRequest represents invalid request errors
-	ErrorTypeInvalidRequest
-
-	// ErrorTypeNotFound represents model not found errors
-	ErrorTypeNotFound
-
-	// ErrorTypeServer represents server errors
-	ErrorTypeServer
-
-	// ErrorTypeNetwork represents network connectivity errors
-	ErrorTypeNetwork
-
-	// ErrorTypeCancelled represents cancelled context errors
-	ErrorTypeCancelled
-
-	// ErrorTypeInputLimit represents input token limit exceeded errors
-	ErrorTypeInputLimit
-
-	// ErrorTypeContentFiltered represents content filtered by safety settings errors
-	ErrorTypeContentFiltered
-)
-
-// APIError represents an enhanced error with detailed information
-type APIError struct {
-	// Original is the original error
-	Original error
-
-	// Type is the categorized error type
-	Type ErrorType
-
-	// Message is a user-friendly error message
-	Message string
-
-	// StatusCode is the HTTP status code (if applicable)
-	StatusCode int
-
-	// Suggestion is a helpful suggestion for resolving the error
-	Suggestion string
-
-	// Details contains additional error details
-	Details string
-}
-
-// Error implements the error interface
-func (e *APIError) Error() string {
-	if e.Original != nil {
-		return fmt.Sprintf("%s: %v", e.Message, e.Original)
-	}
-	return e.Message
-}
-
-// Unwrap returns the original error
-func (e *APIError) Unwrap() error {
-	return e.Original
-}
-
-// UserFacingError returns a user-friendly error message with suggestions
-func (e *APIError) UserFacingError() string {
-	var sb strings.Builder
-
-	// Start with the error message
-	sb.WriteString(e.Message)
-
-	// Add suggestions if available
-	if e.Suggestion != "" {
-		sb.WriteString("\n\nSuggestion: ")
-		sb.WriteString(e.Suggestion)
-	}
-
-	return sb.String()
-}
-
-// DebugInfo returns detailed debugging information about the error
-func (e *APIError) DebugInfo() string {
-	var sb strings.Builder
-
-	sb.WriteString(fmt.Sprintf("Error Type: %v\n", e.Type))
-	sb.WriteString(fmt.Sprintf("Message: %s\n", e.Message))
-
-	if e.StatusCode != 0 {
-		sb.WriteString(fmt.Sprintf("Status Code: %d\n", e.StatusCode))
-	}
-
-	if e.Original != nil {
-		sb.WriteString(fmt.Sprintf("Original Error: %v\n", e.Original))
-	}
-
-	if e.Details != "" {
-		sb.WriteString(fmt.Sprintf("Details: %s\n", e.Details))
-	}
-
-	if e.Suggestion != "" {
-		sb.WriteString(fmt.Sprintf("Suggestion: %s\n", e.Suggestion))
-	}
-
-	return sb.String()
-}
-
-// Category implements the llm.CategorizedError interface, mapping Gemini error types
-// to standardized error categories for provider-agnostic error handling.
-func (e *APIError) Category() llm.ErrorCategory {
-	switch e.Type {
-	case ErrorTypeAuth:
-		return llm.CategoryAuth
-	case ErrorTypeRateLimit:
-		return llm.CategoryRateLimit
-	case ErrorTypeInvalidRequest:
-		return llm.CategoryInvalidRequest
-	case ErrorTypeNotFound:
-		return llm.CategoryNotFound
-	case ErrorTypeServer:
-		return llm.CategoryServer
-	case ErrorTypeNetwork:
-		return llm.CategoryNetwork
-	case ErrorTypeCancelled:
-		return llm.CategoryCancelled
-	case ErrorTypeInputLimit:
-		return llm.CategoryInputLimit
-	case ErrorTypeContentFiltered:
-		return llm.CategoryContentFiltered
-	default:
-		return llm.CategoryUnknown
-	}
-}
-
-// Ensure APIError implements the llm.CategorizedError interface (compile-time check)
-var _ llm.CategorizedError = (*APIError)(nil)
-
-// IsAPIError checks if an error is an APIError and returns it
-func IsAPIError(err error) (*APIError, bool) {
-	var apiErr *APIError
-	if errors.As(err, &apiErr) {
-		return apiErr, true
+// IsGeminiError checks if an error is an llm.LLMError originating from Gemini
+func IsGeminiError(err error) (*llm.LLMError, bool) {
+	var llmErr *llm.LLMError
+	if errors.As(err, &llmErr) && llmErr.Provider == "gemini" {
+		return llmErr, true
 	}
 	return nil, false
 }
 
-// GetErrorType determines the error type based on the error message and status code
-func GetErrorType(err error, statusCode int) ErrorType {
-	if err == nil {
-		return ErrorTypeUnknown
-	}
-
-	errMsg := err.Error()
-
-	// Check for authorization errors
-	if statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden {
-		return ErrorTypeAuth
-	}
-
-	// Check for rate limit or quota errors
-	if statusCode == http.StatusTooManyRequests ||
-		strings.Contains(errMsg, "rate limit") ||
-		strings.Contains(errMsg, "quota") {
-		return ErrorTypeRateLimit
-	}
-
-	// Check for invalid request errors
-	if statusCode == http.StatusBadRequest {
-		return ErrorTypeInvalidRequest
-	}
-
-	// Check for not found errors
-	if statusCode == http.StatusNotFound {
-		return ErrorTypeNotFound
-	}
-
-	// Check for server errors
-	if statusCode >= 500 && statusCode < 600 {
-		return ErrorTypeServer
-	}
-
-	// Check for content filtering
-	if strings.Contains(errMsg, "safety") ||
-		strings.Contains(errMsg, "blocked") ||
-		strings.Contains(errMsg, "filtered") {
-		return ErrorTypeContentFiltered
-	}
-
-	// Check for token limit errors
-	if strings.Contains(errMsg, "token limit") ||
-		strings.Contains(errMsg, "tokens exceeds") {
-		return ErrorTypeInputLimit
-	}
-
-	// Check for network errors
-	if strings.Contains(errMsg, "network") ||
-		strings.Contains(errMsg, "connection") ||
-		strings.Contains(errMsg, "timeout") {
-		return ErrorTypeNetwork
-	}
-
-	// Check for cancellation
-	if strings.Contains(errMsg, "canceled") ||
-		strings.Contains(errMsg, "cancelled") ||
-		strings.Contains(errMsg, "deadline exceeded") {
-		return ErrorTypeCancelled
-	}
-
-	return ErrorTypeUnknown
-}
-
-// FormatAPIError creates a detailed API error from a standard error
-func FormatAPIError(err error, statusCode int) *APIError {
+// FormatAPIError creates a standardized LLMError from a Gemini API error
+func FormatAPIError(err error, statusCode int) *llm.LLMError {
 	if err == nil {
 		return nil
 	}
 
-	// Check if it's already an APIError
-	if apiErr, ok := IsAPIError(err); ok {
-		return apiErr
+	// Check if it's already an LLMError
+	var llmErr *llm.LLMError
+	if errors.As(err, &llmErr) {
+		return llmErr
 	}
 
-	// Determine error type
-	errType := GetErrorType(err, statusCode)
+	// Get error category from the shared library
+	category := getErrorCategory(err, statusCode)
 
-	// Create base API error
-	apiErr := &APIError{
-		Original:   err,
-		Type:       errType,
-		Message:    err.Error(),
-		StatusCode: statusCode,
+	// Create a formatted error with Gemini-specific suggestions
+	llmError := CreateAPIError(category, "", err, "")
+
+	return llmError
+}
+
+// CreateAPIError creates a new LLMError with Gemini-specific settings
+func CreateAPIError(category llm.ErrorCategory, errMsg string, originalErr error, details string) *llm.LLMError {
+	// If no message provided, use the original error message or a default
+	message := errMsg
+	if message == "" && originalErr != nil {
+		message = originalErr.Error()
 	}
 
-	// Enhance error details based on type
-	switch errType {
-	case ErrorTypeAuth:
-		apiErr.Message = "Authentication failed with the Gemini API"
-		apiErr.Suggestion = "Check that your API key is valid and has not expired. Ensure environment variables are set correctly."
+	llmError := llm.New(
+		"gemini",    // Provider
+		"",          // Code
+		0,           // StatusCode
+		message,     // Message
+		"",          // RequestID
+		originalErr, // Original error
+		category,    // Error category
+	)
 
-	case ErrorTypeRateLimit:
-		apiErr.Message = "Request rate limit or quota exceeded on the Gemini API"
-		apiErr.Suggestion = "Wait and try again later. Consider adjusting the --max-concurrent and --rate-limit flags to limit request rate. You can also upgrade your API usage tier if this happens frequently."
-
-	case ErrorTypeInvalidRequest:
-		apiErr.Message = "Invalid request sent to the Gemini API"
-		apiErr.Suggestion = "Check the prompt format and parameters. Ensure they comply with the API requirements."
-
-	case ErrorTypeNotFound:
-		apiErr.Message = "The requested model or resource was not found"
-		apiErr.Suggestion = "Verify that the model name is correct and that the model is available in your region."
-
-	case ErrorTypeServer:
-		apiErr.Message = "Gemini API server error occurred"
-		apiErr.Suggestion = "This is typically a temporary issue. Wait a few moments and try again."
-
-	case ErrorTypeNetwork:
-		apiErr.Message = "Network error while connecting to the Gemini API"
-		apiErr.Suggestion = "Check your internet connection and try again. If persistent, there may be connectivity issues to Google's servers."
-
-	case ErrorTypeCancelled:
-		apiErr.Message = "Request to Gemini API was cancelled"
-		apiErr.Suggestion = "The operation was interrupted. Try again with a longer timeout if needed."
-
-	case ErrorTypeInputLimit:
-		apiErr.Message = "Input token limit exceeded for the Gemini model"
-		apiErr.Suggestion = "Reduce the input size by using --include, --exclude, or --exclude-names flags to filter the context."
-
-	case ErrorTypeContentFiltered:
-		apiErr.Message = "Content was filtered by Gemini API safety settings"
-		apiErr.Suggestion = "Your prompt or content may have triggered safety filters. Review and modify your input to comply with content policies."
-
-	default:
-		apiErr.Message = fmt.Sprintf("Error calling Gemini API: %v", err)
-		apiErr.Suggestion = "Check the logs for more details or try again."
+	// Add details if provided
+	if details != "" {
+		llmError.Details = details
 	}
 
-	return apiErr
+	// Only set default messages and suggestions if a custom message wasn't provided
+	if errMsg == "" {
+		// Set Gemini-specific error messages and suggestions based on category
+		switch category {
+		case llm.CategoryAuth:
+			llmError.Message = "Authentication failed with the Gemini API"
+			llmError.Suggestion = "Check that your API key is valid and has not expired. Ensure environment variables are set correctly."
+
+		case llm.CategoryRateLimit:
+			llmError.Message = "Request rate limit or quota exceeded on the Gemini API"
+			llmError.Suggestion = "Wait and try again later. Consider adjusting the --max-concurrent and --rate-limit flags to limit request rate. You can also upgrade your API usage tier if this happens frequently."
+
+		case llm.CategoryInvalidRequest:
+			llmError.Message = "Invalid request sent to the Gemini API"
+			llmError.Suggestion = "Check the prompt format and parameters. Ensure they comply with the API requirements."
+
+		case llm.CategoryNotFound:
+			llmError.Message = "The requested model or resource was not found"
+			llmError.Suggestion = "Verify that the model name is correct and that the model is available in your region."
+
+		case llm.CategoryServer:
+			llmError.Message = "Gemini API server error occurred"
+			llmError.Suggestion = "This is typically a temporary issue. Wait a few moments and try again."
+
+		case llm.CategoryNetwork:
+			llmError.Message = "Network error while connecting to the Gemini API"
+			llmError.Suggestion = "Check your internet connection and try again. If persistent, there may be connectivity issues to Google's servers."
+
+		case llm.CategoryCancelled:
+			llmError.Message = "Request to Gemini API was cancelled"
+			llmError.Suggestion = "The operation was interrupted. Try again with a longer timeout if needed."
+
+		case llm.CategoryInputLimit:
+			llmError.Message = "Input token limit exceeded for the Gemini model"
+			llmError.Suggestion = "Reduce the input size by using --include, --exclude, or --exclude-names flags to filter the context."
+
+		case llm.CategoryContentFiltered:
+			llmError.Message = "Content was filtered by Gemini API safety settings"
+			llmError.Suggestion = "Your prompt or content may have triggered safety filters. Review and modify your input to comply with content policies."
+
+		default:
+			if originalErr != nil {
+				llmError.Message = fmt.Sprintf("Error calling Gemini API: %v", originalErr)
+			} else {
+				llmError.Message = "Unknown error with Gemini API"
+			}
+			llmError.Suggestion = "Check the logs for more details or try again."
+		}
+	}
+
+	// Always set the suggestion if not already provided
+	if llmError.Suggestion == "" {
+		switch category {
+		case llm.CategoryAuth:
+			llmError.Suggestion = "Check that your API key is valid and has not expired. Ensure environment variables are set correctly."
+		case llm.CategoryRateLimit:
+			llmError.Suggestion = "Wait and try again later. Consider adjusting the --max-concurrent and --rate-limit flags to limit request rate."
+		case llm.CategoryInvalidRequest:
+			llmError.Suggestion = "Check the prompt format and parameters. Ensure they comply with the API requirements."
+		default:
+			llmError.Suggestion = "Check the logs for more details or try again."
+		}
+	}
+
+	return llmError
+}
+
+// getErrorCategory determines the error category based on the error message and status code
+// This is a helper function used internally by FormatAPIError to maintain backward compatibility
+func getErrorCategory(err error, statusCode int) llm.ErrorCategory {
+	if err == nil {
+		return llm.CategoryUnknown
+	}
+
+	errMsg := err.Error()
+
+	// Map HTTP status codes to error categories
+	switch statusCode {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return llm.CategoryAuth
+	case http.StatusTooManyRequests:
+		return llm.CategoryRateLimit
+	case http.StatusBadRequest:
+		return llm.CategoryInvalidRequest
+	case http.StatusNotFound:
+		return llm.CategoryNotFound
+	}
+
+	if statusCode >= 500 && statusCode < 600 {
+		return llm.CategoryServer
+	}
+
+	// Use string matching as fallback for error types
+	lowerMsg := strings.ToLower(errMsg)
+
+	// Match error categories based on error message
+	if strings.Contains(lowerMsg, "rate limit") || strings.Contains(lowerMsg, "quota") {
+		return llm.CategoryRateLimit
+	}
+
+	if strings.Contains(lowerMsg, "safety") || strings.Contains(lowerMsg, "blocked") || strings.Contains(lowerMsg, "filtered") {
+		return llm.CategoryContentFiltered
+	}
+
+	if strings.Contains(lowerMsg, "token limit") || strings.Contains(lowerMsg, "tokens exceeds") {
+		return llm.CategoryInputLimit
+	}
+
+	if strings.Contains(lowerMsg, "network") || strings.Contains(lowerMsg, "connection") || strings.Contains(lowerMsg, "timeout") {
+		return llm.CategoryNetwork
+	}
+
+	if strings.Contains(lowerMsg, "canceled") || strings.Contains(lowerMsg, "cancelled") || strings.Contains(lowerMsg, "deadline exceeded") {
+		return llm.CategoryCancelled
+	}
+
+	return llm.CategoryUnknown
+}
+
+// Backward compatibility functions
+
+// IsAPIError is maintained for backward compatibility
+// It checks if an error is a Gemini error and returns it as an LLMError
+func IsAPIError(err error) (*llm.LLMError, bool) {
+	return IsGeminiError(err)
 }

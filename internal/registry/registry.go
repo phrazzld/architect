@@ -71,14 +71,14 @@ func (r *Registry) LoadConfig(loader ConfigLoaderInterface) error {
 	r.logger.Debug("Loading %d models into registry", len(config.Models))
 	for _, m := range config.Models {
 		r.models[m.Name] = m
-		r.logger.Debug("Registered model '%s' (provider: '%s', context window: %d, max output: %d tokens, %d parameters)",
-			m.Name, m.Provider, m.ContextWindow, m.MaxOutputTokens, len(m.Parameters))
+		r.logger.Debug("Registered model '%s' (provider: '%s', %d parameters)",
+			m.Name, m.Provider, len(m.Parameters))
 	}
 
 	r.logger.Info("Models configuration loaded: %d providers, %d models",
 		len(r.providers), len(r.models))
 
-	// Log the largest context window models for reference
+	// Log summary of loaded models
 	if len(r.models) > 0 {
 		r.logModelsSummary()
 	}
@@ -96,22 +96,6 @@ func getBaseURLLogSuffix(baseURL string) string {
 
 // logModelsSummary logs a summary of the models in the registry
 func (r *Registry) logModelsSummary() {
-	// Find and log the model with the largest context window
-	var largestContextModel string
-	var largestContextSize int32
-
-	for name, model := range r.models {
-		if model.ContextWindow > largestContextSize {
-			largestContextSize = model.ContextWindow
-			largestContextModel = name
-		}
-	}
-
-	if largestContextModel != "" {
-		r.logger.Info("Largest context window: %s with %d tokens",
-			largestContextModel, largestContextSize)
-	}
-
 	// Log providers with their model counts
 	providerModels := make(map[string]int)
 	for _, model := range r.models {
@@ -138,24 +122,8 @@ func (r *Registry) GetModel(name string) (*ModelDefinition, error) {
 		return nil, fmt.Errorf("model '%s' not found in registry", name)
 	}
 
-	r.logger.Debug("Found model '%s' in registry (provider: '%s', context window: %d tokens, max output: %d tokens)",
-		name, model.Provider, model.ContextWindow, model.MaxOutputTokens)
-
-	// Validate token limits just in case they were changed or corrupted
-	if model.ContextWindow <= 0 {
-		r.logger.Warn("Model '%s' has invalid context window: %d (should be positive)",
-			name, model.ContextWindow)
-	}
-
-	if model.MaxOutputTokens <= 0 {
-		r.logger.Warn("Model '%s' has invalid max output tokens: %d (should be positive)",
-			name, model.MaxOutputTokens)
-	}
-
-	if model.MaxOutputTokens > model.ContextWindow {
-		r.logger.Warn("Model '%s' has max output tokens (%d) larger than context window (%d)",
-			name, model.MaxOutputTokens, model.ContextWindow)
-	}
+	r.logger.Debug("Found model '%s' in registry (provider: '%s')",
+		name, model.Provider)
 
 	return &model, nil
 }
@@ -304,4 +272,37 @@ func (r *Registry) CreateLLMClient(ctx context.Context, apiKey, modelName string
 
 	r.logger.Debug("Successfully created LLM client for model '%s'", modelName)
 	return client, nil
+}
+
+// GetAllModelNames returns a list of all model names in the registry.
+func (r *Registry) GetAllModelNames() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	r.logger.Debug("Getting all model names from registry")
+	modelNames := make([]string, 0, len(r.models))
+	for name := range r.models {
+		modelNames = append(modelNames, name)
+	}
+
+	r.logger.Debug("Found %d models in registry", len(modelNames))
+	return modelNames
+}
+
+// GetModelNamesByProvider returns a list of model names for a specific provider.
+func (r *Registry) GetModelNamesByProvider(providerName string) []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	r.logger.Debug("Getting model names for provider '%s'", providerName)
+
+	var modelNames []string
+	for name, model := range r.models {
+		if model.Provider == providerName {
+			modelNames = append(modelNames, name)
+		}
+	}
+
+	r.logger.Debug("Found %d models for provider '%s'", len(modelNames), providerName)
+	return modelNames
 }

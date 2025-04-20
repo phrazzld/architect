@@ -61,8 +61,8 @@ func (tm *tokenManager) GetTokenInfo(ctx context.Context, prompt string) (*Token
 	modelInfo, err := tm.client.GetModelInfo(ctx)
 	if err != nil {
 		// Pass through API errors directly for better error messages
-		if _, ok := gemini.IsAPIError(err); ok {
-			return nil, err
+		if apiErr, ok := gemini.IsGeminiError(err); ok {
+			return nil, apiErr
 		}
 
 		// Wrap other errors
@@ -76,8 +76,8 @@ func (tm *tokenManager) GetTokenInfo(ctx context.Context, prompt string) (*Token
 	tokenResult, err := tm.client.CountTokens(ctx, prompt)
 	if err != nil {
 		// Pass through API errors directly for better error messages
-		if _, ok := gemini.IsAPIError(err); ok {
-			return nil, err
+		if apiErr, ok := gemini.IsGeminiError(err); ok {
+			return nil, apiErr
 		}
 
 		// Wrap other errors

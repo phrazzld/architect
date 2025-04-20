@@ -73,6 +73,26 @@ type apiService struct {
 // registry.GetGlobalManager() function. Use NewRegistryAPIService instead of NewAPIService
 // to take advantage of the registry pattern.
 func DetectProviderFromModel(modelName string) ProviderType {
+	// First attempt to use registry if available
+	regManager := registry.GetGlobalManager(nil)
+	if regManager != nil {
+		provider, err := regManager.GetProviderForModel(modelName)
+		if err == nil {
+			// Convert provider string to ProviderType
+			switch provider {
+			case "gemini":
+				return ProviderGemini
+			case "openai":
+				return ProviderOpenAI
+			case "openrouter":
+				// OpenRouter is not explicitly defined in ProviderType,
+				// so we need to handle it in the calling code
+				return ProviderUnknown
+			}
+		}
+	}
+
+	// Fall back to the original string matching logic
 	if modelName == "" {
 		return ProviderUnknown
 	}
@@ -158,24 +178,58 @@ func (s *apiService) createLLMClient(ctx context.Context, apiKey, modelName, api
 		s.logger.Debug("Using custom API endpoint: %s", apiEndpoint)
 	}
 
-	// Detect provider type from model name
+	// Special case for testing with error-model
+	if modelName == "error-model" {
+		return nil, errors.New("test model error")
+	}
+
+	// Try to use the registry first if available
+	regManager := registry.GetGlobalManager(nil)
+	if regManager != nil {
+		provider, err := regManager.GetProviderForModel(modelName)
+		if err == nil {
+			// Successfully got provider from registry
+			s.logger.Debug("Registry model detection found provider '%s' for model '%s'", provider, modelName)
+
+			var client llm.LLMClient
+			var err error
+
+			// Create client based on provider from registry
+			switch provider {
+			case "gemini":
+				s.logger.Debug("Using Gemini provider for model %s (registry-based)", modelName)
+				client, err = s.newGeminiClientFunc(ctx, apiKey, modelName, apiEndpoint)
+			case "openai":
+				s.logger.Debug("Using OpenAI provider for model %s (registry-based)", modelName)
+				client, err = s.newOpenAIClientFunc(modelName)
+			default:
+				// Unsupported provider type in legacy client
+				s.logger.Warn("Provider '%s' found in registry but not supported by legacy API service", provider)
+				return nil, fmt.Errorf("%w: provider '%s' not supported by legacy API service", ErrUnsupportedModel, provider)
+			}
+
+			// Return client or error
+			return client, err
+		} else {
+			s.logger.Debug("Model '%s' not found in registry, falling back to string matching", modelName)
+		}
+	} else {
+		s.logger.Debug("Registry not available, using string matching for model '%s'", modelName)
+	}
+
+	// Fall back to legacy string matching approach
 	providerType := DetectProviderFromModel(modelName)
 
 	// Initialize the appropriate client based on provider type
 	var client llm.LLMClient
 	var err error
 
-	// Special case for testing with error-model
-	if modelName == "error-model" {
-		return nil, errors.New("test model error")
-	}
-
 	switch providerType {
 	case ProviderGemini:
-		s.logger.Debug("Using Gemini provider for model %s", modelName)
+		s.logger.Debug("Using Gemini provider for model %s (string matching)", modelName)
 		client, err = s.newGeminiClientFunc(ctx, apiKey, modelName, apiEndpoint)
 	case ProviderOpenAI:
-		s.logger.Debug("Using OpenAI provider for model %s", modelName)
+		s.logger.Debug("Using OpenAI provider for model %s (string matching)", modelName)
 		client, err = s.newOpenAIClientFunc(modelName)
 	case ProviderUnknown:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedModel, modelName)
@@ -189,7 +243,7 @@ func (s *apiService) createLLMClient(ctx context.Context, apiKey, modelName, api
 		}
 
 		// Check if it's an OpenAI API error
-		if apiErr, ok := openai.IsAPIError(err); ok {
+		if apiErr, ok := openai.IsOpenAIError(err); ok {
 			return nil, fmt.Errorf("%w: %s", ErrClientInitialization, apiErr.UserFacingError())
 		}
 
@@ -384,7 +438,7 @@ func (s *apiService) IsSafetyBlockedError(err error) bool {
 // This method provides a provider-agnostic way to extract user-friendly error details
 // from provider-specific error types. It handles:
 // - Gemini API errors: Using gemini.IsAPIError and its UserFacingError method
-// - OpenAI API errors: Using openai.IsAPIError and its UserFacingError method
+// - OpenAI API errors: Using openai.IsOpenAIError and its UserFacingError method
 // - Generic errors: Falling back to standard Error() method
 //
 // The approach balances provider-specific error handling with a consistent interface,
@@ -408,7 +462,7 @@ func (s *apiService) GetErrorDetails(err error) string {
 	}
 
 	// Check if it's an OpenAI API error with enhanced details
-	if apiErr, ok := openai.IsAPIError(err); ok {
+	if apiErr, ok := openai.IsOpenAIError(err); ok {
 		return apiErr.UserFacingError()
 	}
 

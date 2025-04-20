@@ -40,8 +40,6 @@ func (m *MockProvider) CreateClient(ctx context.Context, apiKey string, modelID 
 // MockLLMClient implements the llm.LLMClient interface for testing
 type MockLLMClient struct {
 	GenerateContentFunc func(ctx context.Context, prompt string, params map[string]interface{}) (*llm.ProviderResult, error)
-	CountTokensFunc     func(ctx context.Context, prompt string) (*llm.ProviderTokenCount, error)
-	GetModelInfoFunc    func(ctx context.Context) (*llm.ProviderModelInfo, error)
 	GetModelNameFunc    func() string
 	CloseFunc           func() error
 }
@@ -51,20 +49,6 @@ func (m *MockLLMClient) GenerateContent(ctx context.Context, prompt string, para
 		return m.GenerateContentFunc(ctx, prompt, params)
 	}
 	return nil, errors.New("GenerateContentFunc not implemented")
-}
-
-func (m *MockLLMClient) CountTokens(ctx context.Context, prompt string) (*llm.ProviderTokenCount, error) {
-	if m.CountTokensFunc != nil {
-		return m.CountTokensFunc(ctx, prompt)
-	}
-	return nil, errors.New("CountTokensFunc not implemented")
-}
-
-func (m *MockLLMClient) GetModelInfo(ctx context.Context) (*llm.ProviderModelInfo, error) {
-	if m.GetModelInfoFunc != nil {
-		return m.GetModelInfoFunc(ctx)
-	}
-	return nil, errors.New("GetModelInfoFunc not implemented")
 }
 
 func (m *MockLLMClient) GetModelName() string {
@@ -126,11 +110,9 @@ func TestLoadConfig(t *testing.T) {
 				},
 				Models: []ModelDefinition{
 					{
-						Name:            "gpt-4",
-						Provider:        "openai",
-						APIModelID:      "gpt-4",
-						ContextWindow:   8192,
-						MaxOutputTokens: 2048,
+						Name:       "gpt-4",
+						Provider:   "openai",
+						APIModelID: "gpt-4",
 						Parameters: map[string]ParameterDefinition{
 							"temperature": {Type: "float", Default: 0.7},
 						},
@@ -210,11 +192,9 @@ func TestGetModel(t *testing.T) {
 	// Add test models
 	registry.models = map[string]ModelDefinition{
 		"model1": {
-			Name:            "model1",
-			Provider:        "provider1",
-			APIModelID:      "api-model-1",
-			ContextWindow:   8192,
-			MaxOutputTokens: 2048,
+			Name:       "model1",
+			Provider:   "provider1",
+			APIModelID: "api-model-1",
 		},
 	}
 

@@ -37,24 +37,7 @@ func mockAPIWithError(err error) *mockOpenAIAPI {
 	}
 }
 
-// mockTokenizer is a test double implementing tokenizerAPI for controlling token counts
-type mockTokenizer struct {
-	countTokensFunc func(text string, model string) (int, error)
-}
-
-func (m *mockTokenizer) countTokens(text string, model string) (int, error) {
-	return m.countTokensFunc(text, model)
-}
-
-// mockModelInfoProvider implements model info retrieval for testing
-type mockModelInfoProvider struct {
-	getModelInfoFunc func(ctx context.Context, modelName string) (*modelInfo, error)
-}
-
-// getModelInfo retrieves model information using the provided mock function
-func (m *mockModelInfoProvider) getModelInfo(ctx context.Context, modelName string) (*modelInfo, error) {
-	return m.getModelInfoFunc(ctx, modelName)
-}
+// Token-related structs and methods removed
 
 // Helper function to convert to a pointer
 func toPtr[T any](v T) *T {
@@ -90,159 +73,16 @@ func CreateMockOpenAIClientForTesting(modelName string, responseFunc func(ctx co
 				}, nil
 			},
 		},
-		tokenizer: &mockTokenizer{
-			countTokensFunc: func(text string, model string) (int, error) {
-				return 10, nil
-			},
-		},
-		modelName:   modelName,
-		modelLimits: initializeModelLimits(),
+		modelName: modelName,
 	}
 
 	return client, nil
 }
 
 // MockAPIErrorResponse creates a mock error response with specifics about the error
-func MockAPIErrorResponse(errorType ErrorType, statusCode int, message string, details string) *APIError {
-	suggestion := ""
-
-	// Set appropriate suggestion based on error type
-	switch errorType {
-	case ErrorTypeAuth:
-		suggestion = "Check that your API key is valid and has not expired. Ensure environment variables are set correctly."
-	case ErrorTypeRateLimit:
-		suggestion = "Wait and try again later. Consider adjusting the --max-concurrent and --rate-limit flags to limit request rate."
-	case ErrorTypeInvalidRequest:
-		suggestion = "Check the prompt format and parameters. Ensure they comply with the API requirements."
-	case ErrorTypeNotFound:
-		suggestion = "Verify that the model name is correct and that the model is available in your region."
-	case ErrorTypeServer:
-		suggestion = "This is typically a temporary issue. Wait a few moments and try again."
-	case ErrorTypeNetwork:
-		suggestion = "Check your internet connection and try again."
-	case ErrorTypeInputLimit:
-		suggestion = "Reduce the input size or use a model with higher context limits."
-	case ErrorTypeContentFiltered:
-		suggestion = "Your prompt or content may have triggered safety filters. Review and modify your input to comply with content policies."
-	}
-
-	return &APIError{
-		Type:       errorType,
-		Message:    message,
-		StatusCode: statusCode,
-		Suggestion: suggestion,
-		Details:    details,
-	}
+// This is now just a convenience function that forwards to the version in errors.go
+func MockAPIErrorResponseOld(errorType int, statusCode int, message string, details string) *llm.LLMError {
+	return MockAPIErrorResponse(errorType, statusCode, message, details)
 }
 
-// MockModelInfo creates a mock model info provider that returns a fixed model info for any model
-func MockModelInfo(inputTokenLimit, outputTokenLimit int32, errorToReturn error) *mockModelInfoProvider {
-	return &mockModelInfoProvider{
-		getModelInfoFunc: func(ctx context.Context, modelName string) (*modelInfo, error) {
-			if errorToReturn != nil {
-				return nil, errorToReturn
-			}
-			return &modelInfo{
-				inputTokenLimit:  inputTokenLimit,
-				outputTokenLimit: outputTokenLimit,
-			}, nil
-		},
-	}
-}
-
-// MockModelSpecificInfo creates a mock model info provider that returns different info for specific models
-func MockModelSpecificInfo(modelInfoMap map[string]*modelInfo, defaultInfo *modelInfo, errorToReturn error) *mockModelInfoProvider {
-	return &mockModelInfoProvider{
-		getModelInfoFunc: func(ctx context.Context, modelName string) (*modelInfo, error) {
-			if errorToReturn != nil {
-				return nil, errorToReturn
-			}
-
-			// Check if we have specific info for this model
-			if info, ok := modelInfoMap[modelName]; ok {
-				return info, nil
-			}
-
-			// Return default info if no specific info is found
-			return defaultInfo, nil
-		},
-	}
-}
-
-// MockModelInfoWithErrors creates a mock model info provider that returns errors for specific models
-func MockModelInfoWithErrors(errorModels map[string]error, defaultInfo *modelInfo) *mockModelInfoProvider {
-	return &mockModelInfoProvider{
-		getModelInfoFunc: func(ctx context.Context, modelName string) (*modelInfo, error) {
-			// Check if this model should return an error
-			if err, ok := errorModels[modelName]; ok {
-				return nil, err
-			}
-
-			// Return default info for non-error models
-			return defaultInfo, nil
-		},
-	}
-}
-
-// MockTokenCounter creates a mock token counter with predictable token counts
-func MockTokenCounter(fixedTokenCount int, errorToReturn error) *mockTokenizer {
-	return &mockTokenizer{
-		countTokensFunc: func(text string, model string) (int, error) {
-			if errorToReturn != nil {
-				return 0, errorToReturn
-			}
-			return fixedTokenCount, nil
-		},
-	}
-}
-
-// MockDynamicTokenCounter creates a mock token counter that returns token counts based on text length
-func MockDynamicTokenCounter(tokensPerChar float64, errorToReturn error) *mockTokenizer {
-	return &mockTokenizer{
-		countTokensFunc: func(text string, model string) (int, error) {
-			if errorToReturn != nil {
-				return 0, errorToReturn
-			}
-			// Calculate tokens based on text length - simple approximation
-			return int(float64(len(text)) * tokensPerChar), nil
-		},
-	}
-}
-
-// MockModelAwareTokenCounter creates a mock token counter that returns different counts based on the model
-func MockModelAwareTokenCounter(modelTokenCounts map[string]int, defaultCount int, errorToReturn error) *mockTokenizer {
-	return &mockTokenizer{
-		countTokensFunc: func(text string, model string) (int, error) {
-			if errorToReturn != nil {
-				return 0, errorToReturn
-			}
-
-			// If we have a specific count for this model, return it
-			if count, ok := modelTokenCounts[model]; ok {
-				return count, nil
-			}
-
-			// Otherwise, return the default count
-			return defaultCount, nil
-		},
-	}
-}
-
-// MockPredictableTokenCounter creates a token counter that returns predictable results for specific inputs
-func MockPredictableTokenCounter(textToTokenMap map[string]int, defaultCount int, errorToReturn error) *mockTokenizer {
-	return &mockTokenizer{
-		countTokensFunc: func(text string, model string) (int, error) {
-			if errorToReturn != nil {
-				return 0, errorToReturn
-			}
-
-			// If we have a specific count for this text, return it
-			if count, ok := textToTokenMap[text]; ok {
-				return count, nil
-			}
-
-			// Otherwise, return the default count
-			return defaultCount, nil
-		},
-	}
-}
+// Token-related mock functions removed

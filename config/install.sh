@@ -67,5 +67,13 @@ else
     echo -e "- Gemini API key: ${GREEN}Found${NC}"
 fi
 
+if [ -z "$OPENROUTER_API_KEY" ]; then
+    echo -e "${YELLOW}Warning: OPENROUTER_API_KEY environment variable is not set${NC}"
+    echo "You'll need to set this to use OpenRouter models:"
+    echo "  export OPENROUTER_API_KEY=\"your-openrouter-api-key\""
+else
+    echo -e "- OpenRouter API key: ${GREEN}Found${NC}"
+fi
+
 echo -e "\n${GREEN}Installation complete!${NC}"
 echo "You can now use Architect with the configured models."

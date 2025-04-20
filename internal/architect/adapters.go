@@ -135,41 +135,8 @@ func (a *APIServiceAdapter) ValidateModelParameter(modelName, paramName string, 
 	return true, nil
 }
 
-// TokenManagerAdapter provides an adapter for different TokenManager implementations
-// It adapts the internal TokenManager interface to the interfaces.TokenManager interface
-type TokenManagerAdapter struct {
-	// The underlying TokenManager implementation
-	TokenManager TokenManager
-}
-
-// GetTokenInfo delegates to the underlying TokenManager implementation
-// and converts the internal TokenResult to the interfaces.TokenResult
-func (t *TokenManagerAdapter) GetTokenInfo(ctx context.Context, prompt string) (*interfaces.TokenResult, error) {
-	// Call the underlying implementation
-	internalResult, err := t.TokenManager.GetTokenInfo(ctx, prompt)
-	if err != nil {
-		return nil, err
-	}
-
-	// Convert the internal TokenResult to interfaces.TokenResult
-	return &interfaces.TokenResult{
-		TokenCount:   internalResult.TokenCount,
-		InputLimit:   internalResult.InputLimit,
-		ExceedsLimit: internalResult.ExceedsLimit,
-		LimitError:   internalResult.LimitError,
-		Percentage:   internalResult.Percentage,
-	}, nil
-}
-
-// CheckTokenLimit delegates to the underlying TokenManager implementation
-func (t *TokenManagerAdapter) CheckTokenLimit(ctx context.Context, prompt string) error {
-	return t.TokenManager.CheckTokenLimit(ctx, prompt)
-}
-
-// PromptForConfirmation delegates to the underlying TokenManager implementation
-func (t *TokenManagerAdapter) PromptForConfirmation(tokenCount int32, threshold int) bool {
-	return t.TokenManager.PromptForConfirmation(tokenCount, threshold)
-}
+// Note: TokenManagerAdapter was removed as part of T032A
+// to remove token handling from the application.
 
 // ContextGathererAdapter provides an adapter for different ContextGatherer implementations
 // It adapts the internal ContextGatherer interface to the interfaces.ContextGatherer interface
@@ -200,8 +167,8 @@ func internalToInterfacesContextStats(stats *ContextStats) *interfaces.ContextSt
 		ProcessedFilesCount: stats.ProcessedFilesCount,
 		CharCount:           stats.CharCount,
 		LineCount:           stats.LineCount,
-		TokenCount:          stats.TokenCount,
-		ProcessedFiles:      stats.ProcessedFiles,
+		// TokenCount field removed as part of T032F - token handling refactoring
+		ProcessedFiles: stats.ProcessedFiles,
 	}
 }
 
@@ -214,8 +181,8 @@ func interfacesToInternalContextStats(stats *interfaces.ContextStats) *ContextSt
 		ProcessedFilesCount: stats.ProcessedFilesCount,
 		CharCount:           stats.CharCount,
 		LineCount:           stats.LineCount,
-		TokenCount:          stats.TokenCount,
-		ProcessedFiles:      stats.ProcessedFiles,
+		// TokenCount field removed as part of T032F - token handling refactoring
+		ProcessedFiles: stats.ProcessedFiles,
 	}
 }
 

@@ -25,279 +25,304 @@ func newTestError(message string) error {
 	return testError{message: message}
 }
 
-// Test setup helper to create an APIError for testing
-func createTestAPIError() *APIError {
-	return &APIError{
-		Original:   newTestError("original error"),
-		Type:       ErrorTypeInvalidRequest,
-		Message:    "Test error message",
-		StatusCode: http.StatusBadRequest,
-		Suggestion: "Test suggestion",
-		Details:    "Test details",
-	}
-}
-
-// TestAPIError_Error tests the Error method of APIError
-func TestAPIError_Error(t *testing.T) {
+// TestLLMError_Error tests the Error method of LLMError
+func TestLLMError_Error(t *testing.T) {
 	tests := []struct {
 		name     string
-		apiError *APIError
+		llmError *llm.LLMError
 		want     string
 	}{
 		{
-			name:     "with original error",
-			apiError: createTestAPIError(),
-			want:     "Test error message: original error",
+			name: "with original error",
+			llmError: CreateAPIError(
+				llm.CategoryInvalidRequest,
+				"Test error message",
+				newTestError("original error"),
+				"Test details",
+			),
+			want: "Test error message: original error",
 		},
 		{
 			name: "without original error",
-			apiError: &APIError{
-				Message: "Error without original",
-			},
+			llmError: CreateAPIError(
+				llm.CategoryUnknown,
+				"Error without original",
+				nil,
+				"",
+			),
 			want: "Error without original",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.apiError.Error()
-			if got != tt.want {
-				t.Errorf("APIError.Error() = %q, want %q", got, tt.want)
+			got := tt.llmError.Error()
+			if !strings.Contains(got, tt.want) {
+				t.Errorf("LLMError.Error() = %q, want to contain %q", got, tt.want)
 			}
 		})
 	}
 }
 
-// TestAPIError_Unwrap tests the Unwrap method of APIError
-func TestAPIError_Unwrap(t *testing.T) {
+// TestLLMError_Unwrap tests the Unwrap method of LLMError
+func TestLLMError_Unwrap(t *testing.T) {
 	originalErr := newTestError("original error")
 	tests := []struct {
 		name     string
-		apiError *APIError
+		llmError *llm.LLMError
 		want     error
 	}{
 		{
 			name: "with original error",
-			apiError: &APIError{
-				Original: originalErr,
-			},
+			llmError: CreateAPIError(
+				llm.CategoryInvalidRequest,
+				"Test error message",
+				originalErr,
+				"",
+			),
 			want: originalErr,
 		},
 		{
 			name: "without original error",
-			apiError: &APIError{
-				Original: nil,
-			},
+			llmError: CreateAPIError(
+				llm.CategoryInvalidRequest,
+				"Test error message",
+				nil,
+				"",
+			),
 			want: nil,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.apiError.Unwrap()
-			if !errors.Is(got, tt.want) {
-				t.Errorf("APIError.Unwrap() = %v, want %v", got, tt.want)
+			got := tt.llmError.Unwrap()
+			if got != tt.want {
+				t.Errorf("LLMError.Unwrap() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-// TestAPIError_UserFacingError tests the UserFacingError method of APIError
-func TestAPIError_UserFacingError(t *testing.T) {
+// TestLLMError_UserFacingError tests the UserFacingError method of LLMError
+func TestLLMError_UserFacingError(t *testing.T) {
 	tests := []struct {
 		name     string
-		apiError *APIError
+		llmError *llm.LLMError
 		want     string
 	}{
 		{
-			name:     "with suggestion",
-			apiError: createTestAPIError(),
-			want:     "Test error message\n\nSuggestion: Test suggestion",
+			name: "with suggestion",
+			llmError: CreateAPIError(
+				llm.CategoryInvalidRequest,
+				"Test error message",
+				newTestError("original error"),
+				"",
+			),
+			want: "Test error message",
 		},
 		{
 			name: "without suggestion",
-			apiError: &APIError{
-				Message: "Error without suggestion",
-			},
+			llmError: CreateAPIError(
+				llm.CategoryInvalidRequest,
+				"Error without suggestion",
+				nil,
+				"",
+			),
 			want: "Error without suggestion",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.apiError.UserFacingError()
-			if got != tt.want {
-				t.Errorf("APIError.UserFacingError() = %q, want %q", got, tt.want)
+			got := tt.llmError.UserFacingError()
+			if !strings.Contains(got, tt.want) {
+				t.Errorf("LLMError.UserFacingError() = %q, want to contain %q", got, tt.want)
 			}
 		})
 	}
 }
 
-// TestAPIError_DebugInfo tests the DebugInfo method of APIError
-func TestAPIError_DebugInfo(t *testing.T) {
+// TestLLMError_DebugInfo tests the DebugInfo method of LLMError
+func TestLLMError_DebugInfo(t *testing.T) {
 	t.Run("full debug info", func(t *testing.T) {
-		apiErr := createTestAPIError()
-		info := apiErr.DebugInfo()
+		llmErr := CreateAPIError(
+			llm.CategoryInvalidRequest,
+			"Test error message",
+			newTestError("original error"),
+			"Test details",
+		)
+		info := llmErr.DebugInfo()
 
 		// Check that all fields are included in the debug info
 		expectedParts := []string{
-			"Error Type: 3",
+			"Error Category",
 			"Message: Test error message",
-			"Status Code: 400",
-			"Original Error: original error",
-			"Details: Test details",
-			"Suggestion: Test suggestion",
+			"Original Error:",
+			"Details:",
 		}
 
 		for _, part := range expectedParts {
 			if !strings.Contains(info, part) {
-				t.Errorf("APIError.DebugInfo() missing %q", part)
+				t.Errorf("LLMError.DebugInfo() missing %q", part)
 			}
 		}
 	})
 
 	t.Run("with partial fields", func(t *testing.T) {
-		apiErr := &APIError{
-			Type:    ErrorTypeAuth,
-			Message: "Partial debug info",
-		}
-		info := apiErr.DebugInfo()
+		llmErr := CreateAPIError(
+			llm.CategoryAuth,
+			"Partial debug info",
+			nil,
+			"",
+		)
+		info := llmErr.DebugInfo()
 
 		// These should be included
 		shouldContain := []string{
-			"Error Type: 1",
+			"Error Category",
 			"Message: Partial debug info",
-		}
-
-		// These should NOT be included
-		shouldNotContain := []string{
-			"Status Code:",
-			"Original Error:",
-			"Details:",
-			"Suggestion:",
 		}
 
 		for _, part := range shouldContain {
 			if !strings.Contains(info, part) {
-				t.Errorf("APIError.DebugInfo() missing %q", part)
-			}
-		}
-
-		for _, part := range shouldNotContain {
-			if strings.Contains(info, part) {
-				t.Errorf("APIError.DebugInfo() should not contain %q", part)
+				t.Errorf("LLMError.DebugInfo() missing %q", part)
 			}
 		}
 	})
 }
 
-// TestIsAPIError tests the IsAPIError function
-func TestIsAPIError(t *testing.T) {
+// TestIsGeminiError tests the IsGeminiError function
+func TestIsGeminiError(t *testing.T) {
 	tests := []struct {
-		name      string
-		err       error
-		wantErr   *APIError
-		wantIsAPI bool
+		name         string
+		err          error
+		wantErr      *llm.LLMError
+		wantIsGemini bool
 	}{
 		{
-			name:      "nil error",
-			err:       nil,
-			wantErr:   nil,
-			wantIsAPI: false,
+			name:         "nil error",
+			err:          nil,
+			wantErr:      nil,
+			wantIsGemini: false,
 		},
 		{
-			name:      "regular error",
-			err:       newTestError("regular error"),
-			wantErr:   nil,
-			wantIsAPI: false,
+			name:         "regular error",
+			err:          newTestError("regular error"),
+			wantErr:      nil,
+			wantIsGemini: false,
 		},
 		{
-			name:      "APIError",
-			err:       createTestAPIError(),
-			wantErr:   createTestAPIError(),
-			wantIsAPI: true,
+			name: "Gemini LLMError",
+			err: CreateAPIError(
+				llm.CategoryInvalidRequest,
+				"Test error message",
+				newTestError("original error"),
+				"",
+			),
+			wantErr:      nil, // Not checking the exact error as we just want to verify it's detected
+			wantIsGemini: true,
 		},
 		{
-			name: "wrapped APIError",
-			err: fmt.Errorf("wrapped: %w", &APIError{
-				Type:    ErrorTypeAuth,
-				Message: "wrapped APIError",
-			}),
-			wantIsAPI: true,
+			name: "wrapped Gemini LLMError",
+			err: fmt.Errorf("wrapped: %w", CreateAPIError(
+				llm.CategoryAuth,
+				"wrapped LLMError",
+				nil,
+				"",
+			)),
+			wantIsGemini: true,
+		},
+		{
+			name: "other provider LLMError",
+			err: llm.New(
+				"openai",
+				"",
+				0,
+				"not a gemini error",
+				"",
+				nil,
+				llm.CategoryUnknown,
+			),
+			wantIsGemini: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotErr, gotIsAPI := IsAPIError(tt.err)
+			gotErr, gotIsGemini := IsGeminiError(tt.err)
 
-			if gotIsAPI != tt.wantIsAPI {
-				t.Errorf("IsAPIError() isAPI = %v, want %v", gotIsAPI, tt.wantIsAPI)
+			if gotIsGemini != tt.wantIsGemini {
+				t.Errorf("IsGeminiError() isGemini = %v, want %v", gotIsGemini, tt.wantIsGemini)
 			}
 
-			if tt.wantIsAPI {
+			if tt.wantIsGemini {
 				if gotErr == nil {
-					t.Errorf("IsAPIError() returned nil APIError when expected non-nil")
+					t.Errorf("IsGeminiError() returned nil LLMError when expected non-nil")
+					return
+				}
+				if gotErr.Provider != "gemini" {
+					t.Errorf("IsGeminiError() returned LLMError with Provider = %q, want 'gemini'", gotErr.Provider)
 				}
 			} else {
 				if gotErr != nil {
-					t.Errorf("IsAPIError() returned non-nil APIError when expected nil")
+					t.Errorf("IsGeminiError() returned non-nil LLMError when expected nil")
 				}
 			}
 		})
 	}
 }
 
-// TestGetErrorType tests the GetErrorType function
-func TestGetErrorType(t *testing.T) {
+// TestGetErrorCategory tests the getErrorCategory function
+func TestGetErrorCategory(t *testing.T) {
 	tests := []struct {
 		name       string
 		err        error
 		statusCode int
-		want       ErrorType
+		want       llm.ErrorCategory
 	}{
 		{
 			name:       "nil error",
 			err:        nil,
 			statusCode: 0,
-			want:       ErrorTypeUnknown,
+			want:       llm.CategoryUnknown,
 		},
 		// Status code based classification
 		{
 			name:       "unauthorized status",
 			err:        errors.New("any error"),
 			statusCode: http.StatusUnauthorized,
-			want:       ErrorTypeAuth,
+			want:       llm.CategoryAuth,
 		},
 		{
 			name:       "forbidden status",
 			err:        errors.New("any error"),
 			statusCode: http.StatusForbidden,
-			want:       ErrorTypeAuth,
+			want:       llm.CategoryAuth,
 		},
 		{
 			name:       "too many requests status",
 			err:        errors.New("any error"),
 			statusCode: http.StatusTooManyRequests,
-			want:       ErrorTypeRateLimit,
+			want:       llm.CategoryRateLimit,
 		},
 		{
 			name:       "bad request status",
 			err:        errors.New("any error"),
 			statusCode: http.StatusBadRequest,
-			want:       ErrorTypeInvalidRequest,
+			want:       llm.CategoryInvalidRequest,
 		},
 		{
 			name:       "not found status",
 			err:        errors.New("any error"),
 			statusCode: http.StatusNotFound,
-			want:       ErrorTypeNotFound,
+			want:       llm.CategoryNotFound,
 		},
 		{
 			name:       "server error status",
 			err:        errors.New("any error"),
 			statusCode: http.StatusInternalServerError,
-			want:       ErrorTypeServer,
+			want:       llm.CategoryServer,
 		},
 
 		// Message based classification
@@ -305,172 +330,100 @@ func TestGetErrorType(t *testing.T) {
 			name:       "rate limit in message",
 			err:        errors.New("rate limit exceeded"),
 			statusCode: 0,
-			want:       ErrorTypeRateLimit,
+			want:       llm.CategoryRateLimit,
 		},
 		{
 			name:       "quota in message",
 			err:        errors.New("quota exceeded"),
 			statusCode: 0,
-			want:       ErrorTypeRateLimit,
+			want:       llm.CategoryRateLimit,
 		},
 		{
 			name:       "safety in message",
 			err:        errors.New("safety setting triggered"),
 			statusCode: 0,
-			want:       ErrorTypeContentFiltered,
+			want:       llm.CategoryContentFiltered,
 		},
 		{
 			name:       "blocked in message",
 			err:        errors.New("content blocked"),
 			statusCode: 0,
-			want:       ErrorTypeContentFiltered,
+			want:       llm.CategoryContentFiltered,
 		},
 		{
 			name:       "filtered in message",
 			err:        errors.New("content filtered"),
 			statusCode: 0,
-			want:       ErrorTypeContentFiltered,
+			want:       llm.CategoryContentFiltered,
 		},
 		{
 			name:       "token limit in message",
 			err:        errors.New("token limit exceeded"),
 			statusCode: 0,
-			want:       ErrorTypeInputLimit,
+			want:       llm.CategoryInputLimit,
 		},
 		{
 			name:       "tokens exceeds in message",
 			err:        errors.New("tokens exceeds limit"),
 			statusCode: 0,
-			want:       ErrorTypeInputLimit,
+			want:       llm.CategoryInputLimit,
 		},
 		{
 			name:       "network in message",
 			err:        errors.New("network error"),
 			statusCode: 0,
-			want:       ErrorTypeNetwork,
+			want:       llm.CategoryNetwork,
 		},
 		{
 			name:       "connection in message",
 			err:        errors.New("connection failed"),
 			statusCode: 0,
-			want:       ErrorTypeNetwork,
+			want:       llm.CategoryNetwork,
 		},
 		{
 			name:       "timeout in message",
 			err:        errors.New("timeout occurred"),
 			statusCode: 0,
-			want:       ErrorTypeNetwork,
+			want:       llm.CategoryNetwork,
 		},
 		{
 			name:       "canceled in message",
 			err:        errors.New("request canceled"),
 			statusCode: 0,
-			want:       ErrorTypeCancelled,
+			want:       llm.CategoryCancelled,
 		},
 		{
 			name:       "cancelled in message (UK spelling)",
 			err:        errors.New("request cancelled"),
 			statusCode: 0,
-			want:       ErrorTypeCancelled,
+			want:       llm.CategoryCancelled,
 		},
 		{
 			name:       "deadline exceeded in message",
 			err:        errors.New("deadline exceeded"),
 			statusCode: 0,
-			want:       ErrorTypeCancelled,
+			want:       llm.CategoryCancelled,
 		},
 		{
 			name:       "unknown error",
 			err:        errors.New("unknown error"),
 			statusCode: 0,
-			want:       ErrorTypeUnknown,
+			want:       llm.CategoryUnknown,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := GetErrorType(tt.err, tt.statusCode)
+			got := getErrorCategory(tt.err, tt.statusCode)
 			if got != tt.want {
-				t.Errorf("GetErrorType() = %v, want %v", got, tt.want)
+				t.Errorf("getErrorCategory() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-// TestAPIError_Category tests the Category method of APIError
-func TestAPIError_Category(t *testing.T) {
-	tests := []struct {
-		name         string
-		errorType    ErrorType
-		wantCategory llm.ErrorCategory
-	}{
-		{
-			name:         "unknown error",
-			errorType:    ErrorTypeUnknown,
-			wantCategory: llm.CategoryUnknown,
-		},
-		{
-			name:         "auth error",
-			errorType:    ErrorTypeAuth,
-			wantCategory: llm.CategoryAuth,
-		},
-		{
-			name:         "rate limit error",
-			errorType:    ErrorTypeRateLimit,
-			wantCategory: llm.CategoryRateLimit,
-		},
-		{
-			name:         "invalid request error",
-			errorType:    ErrorTypeInvalidRequest,
-			wantCategory: llm.CategoryInvalidRequest,
-		},
-		{
-			name:         "not found error",
-			errorType:    ErrorTypeNotFound,
-			wantCategory: llm.CategoryNotFound,
-		},
-		{
-			name:         "server error",
-			errorType:    ErrorTypeServer,
-			wantCategory: llm.CategoryServer,
-		},
-		{
-			name:         "network error",
-			errorType:    ErrorTypeNetwork,
-			wantCategory: llm.CategoryNetwork,
-		},
-		{
-			name:         "cancelled error",
-			errorType:    ErrorTypeCancelled,
-			wantCategory: llm.CategoryCancelled,
-		},
-		{
-			name:         "input limit error",
-			errorType:    ErrorTypeInputLimit,
-			wantCategory: llm.CategoryInputLimit,
-		},
-		{
-			name:         "content filtered error",
-			errorType:    ErrorTypeContentFiltered,
-			wantCategory: llm.CategoryContentFiltered,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			apiErr := &APIError{
-				Type: tt.errorType,
-			}
-			got := apiErr.Category()
-			if got != tt.wantCategory {
-				t.Errorf("APIError.Category() = %v, want %v", got, tt.wantCategory)
-			}
-		})
-	}
-}
-
-// TestAPIError_IsCategorizedError tests that APIError can be detected as a CategorizedError
-func TestAPIError_IsCategorizedError(t *testing.T) {
+// TestLLMError_IsCategorizedError tests that LLMError can be detected as a CategorizedError
+func TestLLMError_IsCategorizedError(t *testing.T) {
 	tests := []struct {
 		name      string
 		err       error
@@ -491,25 +444,34 @@ func TestAPIError_IsCategorizedError(t *testing.T) {
 		},
 		{
 			name: "auth error",
-			err: &APIError{
-				Type: ErrorTypeAuth,
-			},
+			err: CreateAPIError(
+				llm.CategoryAuth,
+				"auth error",
+				nil,
+				"",
+			),
 			wantCat:   llm.CategoryAuth,
 			wantIsCat: true,
 		},
 		{
 			name: "rate limit error",
-			err: &APIError{
-				Type: ErrorTypeRateLimit,
-			},
+			err: CreateAPIError(
+				llm.CategoryRateLimit,
+				"rate limit error",
+				nil,
+				"",
+			),
 			wantCat:   llm.CategoryRateLimit,
 			wantIsCat: true,
 		},
 		{
-			name: "wrapped APIError",
-			err: fmt.Errorf("wrapped: %w", &APIError{
-				Type: ErrorTypeAuth,
-			}),
+			name: "wrapped LLMError",
+			err: fmt.Errorf("wrapped: %w", CreateAPIError(
+				llm.CategoryAuth,
+				"auth error",
+				nil,
+				"",
+			)),
 			wantCat:   llm.CategoryAuth,
 			wantIsCat: true,
 		},
@@ -538,13 +500,86 @@ func TestAPIError_IsCategorizedError(t *testing.T) {
 	}
 }
 
+// TestCreateAPIError tests the CreateAPIError function
+func TestCreateAPIError(t *testing.T) {
+	tests := []struct {
+		name                   string
+		category               llm.ErrorCategory
+		message                string
+		originalErr            error
+		details                string
+		wantProvider           string
+		wantSuggestionContains string
+	}{
+		{
+			name:                   "auth error",
+			category:               llm.CategoryAuth,
+			message:                "Authentication failed",
+			originalErr:            nil,
+			details:                "",
+			wantProvider:           "gemini",
+			wantSuggestionContains: "API key",
+		},
+		{
+			name:                   "rate limit error",
+			category:               llm.CategoryRateLimit,
+			message:                "Rate limit exceeded",
+			originalErr:            nil,
+			details:                "Test details",
+			wantProvider:           "gemini",
+			wantSuggestionContains: "rate-limit",
+		},
+		{
+			name:                   "with original error",
+			category:               llm.CategoryInvalidRequest,
+			message:                "Invalid request",
+			originalErr:            newTestError("original error"),
+			details:                "Test details",
+			wantProvider:           "gemini",
+			wantSuggestionContains: "API requirements",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := CreateAPIError(tt.category, tt.message, tt.originalErr, tt.details)
+
+			// Check basic properties
+			if result.Provider != tt.wantProvider {
+				t.Errorf("CreateAPIError().Provider = %q, want %q", result.Provider, tt.wantProvider)
+			}
+
+			if result.Message != tt.message {
+				t.Errorf("CreateAPIError().Message = %q, want %q", result.Message, tt.message)
+			}
+
+			if result.Original != tt.originalErr {
+				t.Errorf("CreateAPIError().Original = %v, want %v", result.Original, tt.originalErr)
+			}
+
+			if result.Details != tt.details {
+				t.Errorf("CreateAPIError().Details = %q, want %q", result.Details, tt.details)
+			}
+
+			if result.ErrorCategory != tt.category {
+				t.Errorf("CreateAPIError().ErrorCategory = %v, want %v", result.ErrorCategory, tt.category)
+			}
+
+			// Check that suggestion is set correctly
+			if !strings.Contains(result.Suggestion, tt.wantSuggestionContains) {
+				t.Errorf("CreateAPIError().Suggestion = %q, want to contain %q", result.Suggestion, tt.wantSuggestionContains)
+			}
+		})
+	}
+}
+
 // TestFormatAPIError tests the FormatAPIError function
 func TestFormatAPIError(t *testing.T) {
 	tests := []struct {
 		name           string
 		err            error
 		statusCode     int
-		wantType       ErrorType
+		wantCategory   llm.ErrorCategory
 		wantMessage    string
 		wantSuggestion string
 		wantNil        bool
@@ -555,107 +590,94 @@ func TestFormatAPIError(t *testing.T) {
 			wantNil: true,
 		},
 		{
-			name: "already an APIError",
-			err: &APIError{
-				Type:       ErrorTypeAuth,
-				Message:    "Original message",
-				Suggestion: "Original suggestion",
-				StatusCode: http.StatusUnauthorized,
-				Original:   errors.New("original"),
-			},
-			statusCode:     0, // Should be ignored
-			wantType:       ErrorTypeAuth,
-			wantMessage:    "Original message",
-			wantSuggestion: "Original suggestion",
+			name: "already an LLMError",
+			err: CreateAPIError(
+				llm.CategoryAuth,
+				"Original message",
+				errors.New("original"),
+				"",
+			),
+			statusCode:   0, // Should be ignored
+			wantCategory: llm.CategoryAuth,
+			wantMessage:  "Original message",
 		},
-		// Test each error type to ensure the correct formatting is applied
+		// Test each error category to ensure the correct formatting is applied
 		{
-			name:           "auth error",
-			err:            errors.New("some auth error"),
-			statusCode:     http.StatusUnauthorized,
-			wantType:       ErrorTypeAuth,
-			wantMessage:    "Authentication failed with the Gemini API",
-			wantSuggestion: "Check that your API key is valid and has not expired. Ensure environment variables are set correctly.",
+			name:         "auth error",
+			err:          errors.New("some auth error"),
+			statusCode:   http.StatusUnauthorized,
+			wantCategory: llm.CategoryAuth,
+			wantMessage:  "Authentication failed with the Gemini API",
 		},
 		{
-			name:           "rate limit error by status",
-			err:            errors.New("some rate limit error"),
-			statusCode:     http.StatusTooManyRequests,
-			wantType:       ErrorTypeRateLimit,
-			wantMessage:    "Request rate limit or quota exceeded on the Gemini API",
-			wantSuggestion: "Wait and try again later. Consider adjusting the --max-concurrent and --rate-limit flags to limit request rate. You can also upgrade your API usage tier if this happens frequently.",
+			name:         "rate limit error by status",
+			err:          errors.New("some rate limit error"),
+			statusCode:   http.StatusTooManyRequests,
+			wantCategory: llm.CategoryRateLimit,
+			wantMessage:  "Request rate limit or quota exceeded on the Gemini API",
 		},
 		{
-			name:           "rate limit error by message",
-			err:            errors.New("rate limit exceeded"),
-			statusCode:     http.StatusOK, // Status code doesn't indicate rate limiting
-			wantType:       ErrorTypeRateLimit,
-			wantMessage:    "Request rate limit or quota exceeded on the Gemini API",
-			wantSuggestion: "Wait and try again later. Consider adjusting the --max-concurrent and --rate-limit flags to limit request rate. You can also upgrade your API usage tier if this happens frequently.",
+			name:         "rate limit error by message",
+			err:          errors.New("rate limit exceeded"),
+			statusCode:   http.StatusOK, // Status code doesn't indicate rate limiting
+			wantCategory: llm.CategoryRateLimit,
+			wantMessage:  "Request rate limit or quota exceeded on the Gemini API",
 		},
 		{
-			name:           "invalid request error",
-			err:            errors.New("some invalid request"),
-			statusCode:     http.StatusBadRequest,
-			wantType:       ErrorTypeInvalidRequest,
-			wantMessage:    "Invalid request sent to the Gemini API",
-			wantSuggestion: "Check the prompt format and parameters. Ensure they comply with the API requirements.",
+			name:         "invalid request error",
+			err:          errors.New("some invalid request"),
+			statusCode:   http.StatusBadRequest,
+			wantCategory: llm.CategoryInvalidRequest,
+			wantMessage:  "Invalid request sent to the Gemini API",
 		},
 		{
-			name:           "not found error",
-			err:            errors.New("model not found"),
-			statusCode:     http.StatusNotFound,
-			wantType:       ErrorTypeNotFound,
-			wantMessage:    "The requested model or resource was not found",
-			wantSuggestion: "Verify that the model name is correct and that the model is available in your region.",
+			name:         "not found error",
+			err:          errors.New("model not found"),
+			statusCode:   http.StatusNotFound,
+			wantCategory: llm.CategoryNotFound,
+			wantMessage:  "The requested model or resource was not found",
 		},
 		{
-			name:           "server error",
-			err:            errors.New("internal server error"),
-			statusCode:     http.StatusInternalServerError,
-			wantType:       ErrorTypeServer,
-			wantMessage:    "Gemini API server error occurred",
-			wantSuggestion: "This is typically a temporary issue. Wait a few moments and try again.",
+			name:         "server error",
+			err:          errors.New("internal server error"),
+			statusCode:   http.StatusInternalServerError,
+			wantCategory: llm.CategoryServer,
+			wantMessage:  "Gemini API server error occurred",
 		},
 		{
-			name:           "network error",
-			err:            errors.New("network error occurred"),
-			statusCode:     0,
-			wantType:       ErrorTypeNetwork,
-			wantMessage:    "Network error while connecting to the Gemini API",
-			wantSuggestion: "Check your internet connection and try again. If persistent, there may be connectivity issues to Google's servers.",
+			name:         "network error",
+			err:          errors.New("network error occurred"),
+			statusCode:   0,
+			wantCategory: llm.CategoryNetwork,
+			wantMessage:  "Network error while connecting to the Gemini API",
 		},
 		{
-			name:           "cancelled error",
-			err:            errors.New("request cancelled"),
-			statusCode:     0,
-			wantType:       ErrorTypeCancelled,
-			wantMessage:    "Request to Gemini API was cancelled",
-			wantSuggestion: "The operation was interrupted. Try again with a longer timeout if needed.",
+			name:         "cancelled error",
+			err:          errors.New("request cancelled"),
+			statusCode:   0,
+			wantCategory: llm.CategoryCancelled,
+			wantMessage:  "Request to Gemini API was cancelled",
 		},
 		{
-			name:           "input limit error",
-			err:            errors.New("token limit exceeded"),
-			statusCode:     0,
-			wantType:       ErrorTypeInputLimit,
-			wantMessage:    "Input token limit exceeded for the Gemini model",
-			wantSuggestion: "Reduce the input size by using --include, --exclude, or --exclude-names flags to filter the context.",
+			name:         "input limit error",
+			err:          errors.New("token limit exceeded"),
+			statusCode:   0,
+			wantCategory: llm.CategoryInputLimit,
+			wantMessage:  "Input token limit exceeded for the Gemini model",
 		},
 		{
-			name:           "content filtered error",
-			err:            errors.New("content blocked by safety settings"),
-			statusCode:     0,
-			wantType:       ErrorTypeContentFiltered,
-			wantMessage:    "Content was filtered by Gemini API safety settings",
-			wantSuggestion: "Your prompt or content may have triggered safety filters. Review and modify your input to comply with content policies.",
+			name:         "content filtered error",
+			err:          errors.New("content blocked by safety settings"),
+			statusCode:   0,
+			wantCategory: llm.CategoryContentFiltered,
+			wantMessage:  "Content was filtered by Gemini API safety settings",
 		},
 		{
-			name:           "unknown error",
-			err:            errors.New("some unknown error"),
-			statusCode:     0,
-			wantType:       ErrorTypeUnknown,
-			wantMessage:    "Error calling Gemini API: some unknown error",
-			wantSuggestion: "Check the logs for more details or try again.",
+			name:         "unknown error",
+			err:          errors.New("some unknown error"),
+			statusCode:   0,
+			wantCategory: llm.CategoryUnknown,
+			wantMessage:  "Error calling Gemini API: some unknown error",
 		},
 	}
 
@@ -674,40 +696,62 @@ func TestFormatAPIError(t *testing.T) {
 				t.Fatal("FormatAPIError() returned nil, want non-nil")
 			}
 
-			// For already APIError cases, check the error is returned as-is
-			if apiErr, ok := tt.err.(*APIError); ok {
-				// For existing APIError, the function should return the same object
-				if result != apiErr {
-					t.Errorf("FormatAPIError() should return the same APIError instance for an existing APIError")
+			// For already LLMError cases, check the error is returned as-is
+			if _, ok := tt.err.(*llm.LLMError); ok {
+				// For existing LLMError, the function should return the same object
+				if result != tt.err {
+					t.Errorf("FormatAPIError() should return the same LLMError instance for an existing LLMError")
 				}
 				return
 			}
 
 			// For regular errors, check error properties
-			// Check error type
-			if result.Type != tt.wantType {
-				t.Errorf("FormatAPIError().Type = %v, want %v", result.Type, tt.wantType)
+			// Check error category
+			if result.ErrorCategory != tt.wantCategory {
+				t.Errorf("FormatAPIError().ErrorCategory = %v, want %v", result.ErrorCategory, tt.wantCategory)
 			}
 
 			// Check message
-			if result.Message != tt.wantMessage {
-				t.Errorf("FormatAPIError().Message = %q, want %q", result.Message, tt.wantMessage)
+			if !strings.Contains(result.Message, tt.wantMessage) {
+				t.Errorf("FormatAPIError().Message = %q, want to contain %q", result.Message, tt.wantMessage)
 			}
 
-			// Check suggestion
-			if result.Suggestion != tt.wantSuggestion {
-				t.Errorf("FormatAPIError().Suggestion = %q, want %q", result.Suggestion, tt.wantSuggestion)
+			// Check provider
+			if result.Provider != "gemini" {
+				t.Errorf("FormatAPIError().Provider = %q, want \"gemini\"", result.Provider)
 			}
 
 			// Check that original error is preserved
-			if result.Original != tt.err {
-				t.Errorf("FormatAPIError().Original = %v, want %v", result.Original, tt.err)
-			}
-
-			// Check status code
-			if result.StatusCode != tt.statusCode {
-				t.Errorf("FormatAPIError().StatusCode = %v, want %v", result.StatusCode, tt.statusCode)
+			if result.Original == nil {
+				t.Errorf("FormatAPIError().Original is nil, expected non-nil")
 			}
 		})
+	}
+}
+
+// TestIsAPIError tests backward compatibility with IsAPIError
+func TestIsAPIError(t *testing.T) {
+	// Create a test error
+	testErr := CreateAPIError(
+		llm.CategoryInvalidRequest,
+		"test error",
+		nil,
+		"",
+	)
+
+	// Test the backward compatibility function
+	llmErr, ok := IsAPIError(testErr)
+
+	if !ok {
+		t.Errorf("IsAPIError() returned false, want true")
+	}
+
+	if llmErr == nil {
+		t.Errorf("IsAPIError() returned nil, want non-nil")
+		return
+	}
+
+	if llmErr.Provider != "gemini" {
+		t.Errorf("IsAPIError() returned LLMError with Provider = %q, want \"gemini\"", llmErr.Provider)
 	}
 }

@@ -26,11 +26,10 @@ import (
 
 // Orchestrator coordinates the main application logic.
 // It depends on various services to perform tasks like interacting with the API,
-// gathering context, managing tokens, writing files, logging audits, and handling rate limits.
+// gathering context, writing files, logging audits, and handling rate limits.
 type Orchestrator struct {
 	apiService      interfaces.APIService
 	contextGatherer interfaces.ContextGatherer
-	tokenManager    interfaces.TokenManager
 	fileWriter      interfaces.FileWriter
 	auditLogger     auditlog.AuditLogger
 	rateLimiter     *ratelimit.RateLimiter
@@ -44,7 +43,6 @@ type Orchestrator struct {
 func NewOrchestrator(
 	apiService interfaces.APIService,
 	contextGatherer interfaces.ContextGatherer,
-	tokenManager interfaces.TokenManager,
 	fileWriter interfaces.FileWriter,
 	auditLogger auditlog.AuditLogger,
 	rateLimiter *ratelimit.RateLimiter,
@@ -54,7 +52,6 @@ func NewOrchestrator(
 	return &Orchestrator{
 		apiService:      apiService,
 		contextGatherer: contextGatherer,
-		tokenManager:    tokenManager,
 		fileWriter:      fileWriter,
 		auditLogger:     auditLogger,
 		rateLimiter:     rateLimiter,

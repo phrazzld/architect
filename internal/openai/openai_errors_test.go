@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/openai/openai-go"
+	"github.com/phrazzld/architect/internal/llm"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -64,51 +65,55 @@ func TestToPtrFunction(t *testing.T) {
 // TestAPIErrorCreation verifies that MockAPIErrorResponse creates
 // properly formatted API errors with appropriate suggestions
 func TestAPIErrorCreation(t *testing.T) {
+	// Define the constants for old error types
+	const (
+		ErrorTypeAuth           = 1
+		ErrorTypeRateLimit      = 2
+		ErrorTypeInvalidRequest = 3
+	)
+
 	testCases := []struct {
-		name        string
-		errorType   ErrorType
-		statusCode  int
-		message     string
-		details     string
-		expectation func(*testing.T, *APIError)
+		name          string
+		errorType     int
+		statusCode    int
+		message       string
+		details       string
+		expectSuggest string
+		expectCat     llm.ErrorCategory
 	}{
 		{
-			name:       "Authentication Error",
-			errorType:  ErrorTypeAuth,
-			statusCode: http.StatusUnauthorized,
-			message:    "Invalid API key",
-			details:    "API key is invalid or expired",
-			expectation: func(t *testing.T, err *APIError) {
-				assert.Equal(t, ErrorTypeAuth, err.Type)
-				assert.Equal(t, http.StatusUnauthorized, err.StatusCode)
-				assert.Contains(t, err.Suggestion, "Check that your API key is valid")
-			},
+			name:          "Authentication Error",
+			errorType:     ErrorTypeAuth,
+			statusCode:    http.StatusUnauthorized,
+			message:       "Invalid API key",
+			details:       "API key is invalid or expired",
+			expectSuggest: "Check that your API key is valid",
+			expectCat:     llm.CategoryAuth,
 		},
 		{
-			name:       "Rate Limit Error",
-			errorType:  ErrorTypeRateLimit,
-			statusCode: http.StatusTooManyRequests,
-			message:    "Rate limit exceeded",
-			details:    "Too many requests per minute",
-			expectation: func(t *testing.T, err *APIError) {
-				assert.Equal(t, ErrorTypeRateLimit, err.Type)
-				assert.Equal(t, http.StatusTooManyRequests, err.StatusCode)
-				assert.Contains(t, err.Suggestion, "Wait and try again later")
-			},
+			name:          "Rate Limit Error",
+			errorType:     ErrorTypeRateLimit,
+			statusCode:    http.StatusTooManyRequests,
+			message:       "Rate limit exceeded",
+			details:       "Too many requests per minute",
+			expectSuggest: "Wait and try again later",
+			expectCat:     llm.CategoryRateLimit,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create error using the previously unused MockAPIErrorResponse function
+			// Create error using the MockAPIErrorResponse function
 			apiError := MockAPIErrorResponse(tc.errorType, tc.statusCode, tc.message, tc.details)
 
 			// Verify basic fields
 			assert.Equal(t, tc.message, apiError.Message)
 			assert.Equal(t, tc.details, apiError.Details)
+			assert.Equal(t, tc.statusCode, apiError.StatusCode)
+			assert.Equal(t, tc.expectCat, apiError.ErrorCategory)
 
-			// Run specific expectations
-			tc.expectation(t, apiError)
+			// Check that the suggestion is correct
+			assert.Contains(t, apiError.Suggestion, tc.expectSuggest)
 
 			// Test that it implements the error interface properly
 			assert.Contains(t, apiError.Error(), tc.message)

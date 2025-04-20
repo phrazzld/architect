@@ -15,12 +15,13 @@ import (
 // Configuration constants
 const (
 	// Default values
-	DefaultOutputFile  = "PLAN.md"
-	DefaultModel       = "gemini-2.5-pro-exp-03-25"
-	APIKeyEnvVar       = "GEMINI_API_KEY"
-	APIEndpointEnvVar  = "GEMINI_API_URL"
-	OpenAIAPIKeyEnvVar = "OPENAI_API_KEY"
-	DefaultFormat      = "<{path}>\n```\n{content}\n```\n</{path}>\n\n"
+	DefaultOutputFile      = "PLAN.md"
+	DefaultModel           = "gemini-2.5-pro-exp-03-25"
+	APIKeyEnvVar           = "GEMINI_API_KEY"
+	APIEndpointEnvVar      = "GEMINI_API_URL"
+	OpenAIAPIKeyEnvVar     = "OPENAI_API_KEY"
+	OpenRouterAPIKeyEnvVar = "OPENROUTER_API_KEY"
+	DefaultFormat          = "<{path}>\n```\n{content}\n```\n</{path}>\n\n"
 
 	// Default rate limiting values
 	DefaultMaxConcurrentRequests      = 5  // Default maximum concurrent API requests
@@ -54,8 +55,8 @@ type AppConfig struct {
 	Format     string
 
 	// File handling settings
-	Include       string
-	ConfirmTokens int
+	Include string
+	// ConfirmTokens field removed as part of T032E
 
 	// Logging and display settings
 	Verbose  bool
@@ -68,11 +69,11 @@ type AppConfig struct {
 // DefaultConfig returns a new AppConfig instance with default values
 func DefaultConfig() *AppConfig {
 	return &AppConfig{
-		OutputFile:    DefaultOutputFile,
-		ModelName:     DefaultModel,
-		Format:        DefaultFormat,
-		LogLevel:      logutil.InfoLevel,
-		ConfirmTokens: 0, // Disabled by default
+		OutputFile: DefaultOutputFile,
+		ModelName:  DefaultModel,
+		Format:     DefaultFormat,
+		LogLevel:   logutil.InfoLevel,
+		// ConfirmTokens removed as part of T032E - token management refactoring
 		Excludes: ExcludeConfig{
 			Extensions: DefaultExcludes,
 			Names:      DefaultExcludeNames,
@@ -107,8 +108,7 @@ type CliConfig struct {
 	APIEndpoint string
 	ModelNames  []string
 
-	// Token management
-	ConfirmTokens int
+	// Token management field removed as part of T032E
 
 	// Logging
 	LogLevel logutil.LogLevel
@@ -186,13 +186,16 @@ func ValidateConfigWithEnv(config *CliConfig, logger logutil.LoggerInterface, ge
 	// Check for API key based on model configuration
 	modelNeedsOpenAIKey := false
 	modelNeedsGeminiKey := false
+	modelNeedsOpenRouterKey := false
 
-	// Check if any model is OpenAI or Gemini
+	// Check if any model is OpenAI, Gemini, or OpenRouter
 	for _, model := range config.ModelNames {
 		if strings.HasPrefix(strings.ToLower(model), "gpt-") ||
 			strings.HasPrefix(strings.ToLower(model), "text-") ||
 			strings.Contains(strings.ToLower(model), "openai") {
 			modelNeedsOpenAIKey = true
+		} else if strings.Contains(strings.ToLower(model), "openrouter") {
+			modelNeedsOpenRouterKey = true
 		} else {
 			// Default to Gemini for any other model
 			modelNeedsGeminiKey = true
@@ -211,6 +214,15 @@ func ValidateConfigWithEnv(config *CliConfig, logger logutil.LoggerInterface, ge
 		if openAIKey == "" {
 			logError("%s environment variable not set.", OpenAIAPIKeyEnvVar)
 			return fmt.Errorf("openAI API key not set")
+		}
+	}
+
+	// If any OpenRouter model is used, check for OpenRouter API key
+	if modelNeedsOpenRouterKey {
+		openRouterKey := getenv(OpenRouterAPIKeyEnvVar)
+		if openRouterKey == "" {
+			logError("%s environment variable not set.", OpenRouterAPIKeyEnvVar)
+			return fmt.Errorf("openRouter API key not set")
 		}
 	}
 

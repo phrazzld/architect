@@ -229,59 +229,6 @@ func (a *OpenAIClientAdapter) getIntParam(name string) (int32, bool) {
 	return 0, false
 }
 
-// CountTokens implements the llm.LLMClient interface
-func (a *OpenAIClientAdapter) CountTokens(ctx context.Context, prompt string) (*llm.ProviderTokenCount, error) {
-	return a.client.CountTokens(ctx, prompt)
-}
-
-// GetModelInfo implements the llm.LLMClient interface and uses configuration data
-func (a *OpenAIClientAdapter) GetModelInfo(ctx context.Context) (*llm.ProviderModelInfo, error) {
-	// First try to get the model info from the underlying client
-	modelInfo, err := a.client.GetModelInfo(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// The registry is the source of truth for token limits
-	// The main token counting functions will use registry data via registry_token.go
-	// This provides reasonable defaults for non-registry usage scenarios
-
-	// These values may be overridden by the registry-aware TokenManager
-	// but we provide sensible defaults for direct client usage
-	modelName := a.client.GetModelName()
-
-	// Don't override any limits if they're already set and valid
-	if modelInfo.InputTokenLimit <= 0 || modelInfo.OutputTokenLimit <= 0 {
-		// Set reasonable defaults based on the model name
-		// This is only used if registry is not available
-		if strings.Contains(modelName, "gpt-4.1-mini") {
-			modelInfo.InputTokenLimit = 1000000 // 1M tokens
-			modelInfo.OutputTokenLimit = 32768
-		} else if strings.Contains(modelName, "gpt-4o") {
-			modelInfo.InputTokenLimit = 128000 // 128K for GPT-4o
-			modelInfo.OutputTokenLimit = 4096
-		} else if strings.Contains(modelName, "gpt-4-turbo") {
-			modelInfo.InputTokenLimit = 128000 // 128K for GPT-4 Turbo
-			modelInfo.OutputTokenLimit = 4096
-		} else if strings.Contains(modelName, "gpt-4-32k") {
-			modelInfo.InputTokenLimit = 32768 // 32K for GPT-4-32k
-			modelInfo.OutputTokenLimit = 4096
-		} else if strings.Contains(modelName, "gpt-4") {
-			modelInfo.InputTokenLimit = 8192 // 8K for regular GPT-4
-			modelInfo.OutputTokenLimit = 2048
-		} else if strings.Contains(modelName, "gpt-3.5-turbo") {
-			modelInfo.InputTokenLimit = 16385 // 16K for GPT-3.5 Turbo
-			modelInfo.OutputTokenLimit = 4096
-		} else {
-			// Conservative default fallback for unknown models
-			modelInfo.InputTokenLimit = 4096
-			modelInfo.OutputTokenLimit = 2048
-		}
-	}
-
-	return modelInfo, nil
-}
-
 // GetModelName implements the llm.LLMClient interface
 func (a *OpenAIClientAdapter) GetModelName() string {
 	return a.client.GetModelName()

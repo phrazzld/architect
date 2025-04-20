@@ -16,7 +16,6 @@ import (
 	"github.com/phrazzld/architect/internal/llm"
 	"github.com/phrazzld/architect/internal/logutil"
 	"github.com/phrazzld/architect/internal/ratelimit"
-	"github.com/phrazzld/architect/internal/registry"
 	"github.com/phrazzld/architect/internal/runutil"
 )
 
@@ -89,8 +88,8 @@ func Execute(
 		"dry_run":           cliConfig.DryRun,
 		"verbose":           cliConfig.Verbose,
 		"model_names":       cliConfig.ModelNames,
-		"confirm_tokens":    cliConfig.ConfirmTokens,
-		"log_level":         cliConfig.LogLevel,
+		// "confirm_tokens" field removed as part of T032E - token management refactoring
+		"log_level": cliConfig.LogLevel,
 	}
 
 	if err := auditLogger.Log(auditlog.AuditEntry{
@@ -191,54 +190,9 @@ func Execute(
 	}
 	defer func() { _ = referenceClientLLM.Close() }()
 
-	// Create TokenManager with the LLM client reference
-	// Try to get the global registry manager if it's been initialized
-	var tokenManager TokenManager
-	var tokenManagerErr error
-
-	// Import registry package only in this file to avoid circular dependencies
-	registryManager := GetGlobalRegistryManager()
-	if registryManager != nil {
-		// Registry manager is available, create registry-aware token manager
-		logger.Debug("Creating registry-aware token manager")
-		// Type assertion to get the actual registry manager
-		if regManager, ok := registryManager.(*registry.Manager); ok {
-			tokenManager, tokenManagerErr = NewRegistryTokenManager(
-				logger,
-				auditLogger,
-				referenceClientLLM,
-				regManager.GetRegistry(),
-			)
-		} else {
-			// Fall back to standard token manager if type assertion fails
-			logger.Debug("Registry manager type assertion failed, using standard token manager")
-			tokenManager, tokenManagerErr = NewTokenManager(logger, auditLogger, referenceClientLLM, nil)
-		}
-	} else {
-		// Registry manager not available, fall back to standard token manager
-		logger.Debug("Creating standard token manager (registry not available)")
-		tokenManager, tokenManagerErr = NewTokenManager(logger, auditLogger, referenceClientLLM, nil)
-	}
-
-	if tokenManagerErr != nil {
-		// Check if this is a categorized error for better error messages
-		if catErr, ok := llm.IsCategorizedError(tokenManagerErr); ok {
-			category := catErr.Category()
-			logger.Error("Failed to create token manager: %v (category: %s)",
-				tokenManagerErr, category.String())
-
-			// For token manager, the most likely issues are related to model info
-			if category == llm.CategoryNotFound {
-				return fmt.Errorf("token counting unavailable for model %s: %w", cliConfig.ModelNames[0], tokenManagerErr)
-			}
-		} else {
-			logger.Error("Failed to create token manager: %v", tokenManagerErr)
-		}
-		return fmt.Errorf("failed to create token manager: %w", tokenManagerErr)
-	}
-
-	// Now ContextGatherer directly uses LLMClient
-	contextGatherer := NewContextGatherer(logger, cliConfig.DryRun, tokenManager, referenceClientLLM, auditLogger)
+	// Create context gatherer with LLMClient
+	// Note: TokenManager was completely removed as part of tasks T032A through T032D
+	contextGatherer := NewContextGatherer(logger, cliConfig.DryRun, referenceClientLLM, auditLogger)
 	fileWriter := NewFileWriter(logger, auditLogger)
 
 	// Create rate limiter from configuration
@@ -250,14 +204,12 @@ func Execute(
 	// 5. Create and run the orchestrator
 	// Create adapters for the interfaces
 	apiServiceAdapter := &APIServiceAdapter{APIService: apiService}
-	tokenManagerAdapter := &TokenManagerAdapter{TokenManager: tokenManager}
 	contextGathererAdapter := &ContextGathererAdapter{ContextGatherer: contextGatherer}
 	fileWriterAdapter := &FileWriterAdapter{FileWriter: fileWriter}
 
 	orch := orchestratorConstructor(
 		apiServiceAdapter,
 		contextGathererAdapter,
-		tokenManagerAdapter,
 		fileWriterAdapter,
 		auditLogger,
 		rateLimiter,
@@ -315,7 +267,6 @@ func SetRegistryManagerGetter(getter func() interface{}) {
 var orchestratorConstructor = func(
 	apiService interfaces.APIService,
 	contextGatherer interfaces.ContextGatherer,
-	tokenManager interfaces.TokenManager,
 	fileWriter interfaces.FileWriter,
 	auditLogger auditlog.AuditLogger,
 	rateLimiter *ratelimit.RateLimiter,
@@ -325,7 +276,6 @@ var orchestratorConstructor = func(
 	return orchestrator.NewOrchestrator(
 		apiService,
 		contextGatherer,
-		tokenManager,
 		fileWriter,
 		auditLogger,
 		rateLimiter,

@@ -14,8 +14,6 @@ import (
 // MockLLMClient implements the llm.LLMClient interface for testing
 type MockLLMClient struct {
 	GenerateContentFunc func(ctx context.Context, prompt string, params map[string]interface{}) (*llm.ProviderResult, error)
-	CountTokensFunc     func(ctx context.Context, prompt string) (*llm.ProviderTokenCount, error)
-	GetModelInfoFunc    func(ctx context.Context) (*llm.ProviderModelInfo, error)
 	GetModelNameFunc    func() string
 	CloseFunc           func() error
 }
@@ -26,26 +24,6 @@ func (m *MockLLMClient) GenerateContent(ctx context.Context, prompt string, para
 		return m.GenerateContentFunc(ctx, prompt, params)
 	}
 	return &llm.ProviderResult{Content: "Test response"}, nil
-}
-
-// CountTokens implements the llm.LLMClient interface for testing
-func (m *MockLLMClient) CountTokens(ctx context.Context, prompt string) (*llm.ProviderTokenCount, error) {
-	if m.CountTokensFunc != nil {
-		return m.CountTokensFunc(ctx, prompt)
-	}
-	return &llm.ProviderTokenCount{Total: 10}, nil
-}
-
-// GetModelInfo implements the llm.LLMClient interface for testing
-func (m *MockLLMClient) GetModelInfo(ctx context.Context) (*llm.ProviderModelInfo, error) {
-	if m.GetModelInfoFunc != nil {
-		return m.GetModelInfoFunc(ctx)
-	}
-	return &llm.ProviderModelInfo{
-		Name:             "test-model",
-		InputTokenLimit:  8192,
-		OutputTokenLimit: 4096,
-	}, nil
 }
 
 // GetModelName implements the llm.LLMClient interface for testing
@@ -127,39 +105,5 @@ func TestGeminiClientAdapter(t *testing.T) {
 	_, err = adapter.GenerateContent(context.Background(), "test prompt", nil)
 	if err == nil {
 		t.Fatal("Expected error from GenerateContent, got nil")
-	}
-}
-
-// TestGeminiClientGetModelInfo tests the GetModelInfo method
-func TestGeminiClientGetModelInfo(t *testing.T) {
-	// Create a mock client with a specific model info response
-	mockClient := &MockLLMClient{
-		GetModelInfoFunc: func(ctx context.Context) (*llm.ProviderModelInfo, error) {
-			return &llm.ProviderModelInfo{
-				Name:             "gemini-1.5-pro",
-				InputTokenLimit:  32768,
-				OutputTokenLimit: 8192,
-			}, nil
-		},
-	}
-
-	// Create an adapter
-	adapter := NewGeminiClientAdapter(mockClient)
-
-	// Test GetModelInfo
-	info, err := adapter.GetModelInfo(context.Background())
-	if err != nil {
-		t.Fatalf("Expected no error from GetModelInfo, got: %v", err)
-	}
-
-	// Verify the model info
-	if info.Name != "gemini-1.5-pro" {
-		t.Errorf("Expected model name 'gemini-1.5-pro', got: %s", info.Name)
-	}
-	if info.InputTokenLimit != 32768 {
-		t.Errorf("Expected input token limit 32768, got: %d", info.InputTokenLimit)
-	}
-	if info.OutputTokenLimit != 8192 {
-		t.Errorf("Expected output token limit 8192, got: %d", info.OutputTokenLimit)
 	}
 }

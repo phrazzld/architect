@@ -285,7 +285,7 @@ func TestCreateStandardConfig(t *testing.T) {
 		WithModelNames("custom-model-1", "custom-model-2"),
 		WithIncludeFilter("*.go,*.md"),
 		WithExcludeFilter("*_test.go"),
-		WithConfirmTokens(5000),
+		// WithConfirmTokens removed as part of T032E
 		WithLogLevel(logutil.DebugLevel),
 		WithAuditLogFile("audit.log"),
 		WithPaths("/custom/path1", "/custom/path2"),
@@ -296,7 +296,7 @@ func TestCreateStandardConfig(t *testing.T) {
 	assert.Equal(t, []string{"custom-model-1", "custom-model-2"}, customCfg.ModelNames, "Model names not set correctly")
 	assert.Equal(t, "*.go,*.md", customCfg.Include, "Include filter not set correctly")
 	assert.Equal(t, "*_test.go", customCfg.Exclude, "Exclude filter not set correctly")
-	assert.Equal(t, 5000, customCfg.ConfirmTokens, "ConfirmTokens not set correctly")
+	// ConfirmTokens check removed as part of T032E
 	assert.Equal(t, logutil.DebugLevel, customCfg.LogLevel, "LogLevel not set correctly")
 	assert.Equal(t, "audit.log", customCfg.AuditLogFile, "AuditLogFile not set correctly")
 	assert.Equal(t, []string{"/custom/path1", "/custom/path2"}, customCfg.Paths, "Paths not set correctly")
@@ -333,12 +333,6 @@ func TestConfigOptions(t *testing.T) {
 		cfg := &config.CliConfig{}
 		WithExcludeFilter("*.test.go")(cfg)
 		assert.Equal(t, "*.test.go", cfg.Exclude, "WithExcludeFilter should set Exclude correctly")
-	})
-
-	t.Run("WithConfirmTokens", func(t *testing.T) {
-		cfg := &config.CliConfig{}
-		WithConfirmTokens(1000)(cfg)
-		assert.Equal(t, 1000, cfg.ConfirmTokens, "WithConfirmTokens should set ConfirmTokens correctly")
 	})
 
 	t.Run("WithLogLevel", func(t *testing.T) {

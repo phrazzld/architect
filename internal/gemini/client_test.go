@@ -142,49 +142,7 @@ func TestMockClient(t *testing.T) {
 	client := NewMockClient()
 	ctx := context.Background()
 
-	t.Run("GetModelInfo", func(t *testing.T) {
-		// Test with default mock implementation
-		info, err := client.GetModelInfo(ctx)
-		if err != nil {
-			t.Fatalf("GetModelInfo returned unexpected error: %v", err)
-		}
-
-		if info == nil {
-			t.Fatal("GetModelInfo returned nil info")
-		}
-
-		if info.Name != "mock-model" {
-			t.Errorf("Expected model name %q, got %q", "mock-model", info.Name)
-		}
-
-		if info.InputTokenLimit != 32000 {
-			t.Errorf("Expected input token limit %d, got %d", 32000, info.InputTokenLimit)
-		}
-
-		if info.OutputTokenLimit != 8192 {
-			t.Errorf("Expected output token limit %d, got %d", 8192, info.OutputTokenLimit)
-		}
-
-		// Test with custom mock implementation
-		customInfo := &ModelInfo{
-			Name:             "custom-model",
-			InputTokenLimit:  10000,
-			OutputTokenLimit: 5000,
-		}
-
-		client.GetModelInfoFunc = func(ctx context.Context) (*ModelInfo, error) {
-			return customInfo, nil
-		}
-
-		info, err = client.GetModelInfo(ctx)
-		if err != nil {
-			t.Fatalf("GetModelInfo with custom mock returned unexpected error: %v", err)
-		}
-
-		if info != customInfo {
-			t.Errorf("Expected custom model info, got different instance")
-		}
-	})
+	// GetModelInfo test removed in T036A-1
 
 	t.Run("GenerateContent", func(t *testing.T) {
 		// Test default implementation
@@ -221,29 +179,7 @@ func TestMockClient(t *testing.T) {
 		}
 	})
 
-	t.Run("CountTokens", func(t *testing.T) {
-		// Test default implementation
-		count, err := client.CountTokens(ctx, "test")
-		if err != nil {
-			t.Fatalf("CountTokens returned unexpected error: %v", err)
-		}
-		if count.Total != 10 {
-			t.Errorf("Expected count %d, got %d", 10, count.Total)
-		}
-
-		// Test custom implementation
-		client.CountTokensFunc = func(ctx context.Context, prompt string) (*TokenCount, error) {
-			return &TokenCount{Total: int32(len(prompt))}, nil
-		}
-
-		count, err = client.CountTokens(ctx, "12345")
-		if err != nil {
-			t.Fatalf("CountTokens returned unexpected error: %v", err)
-		}
-		if count.Total != 5 {
-			t.Errorf("Expected count %d, got %d", 5, count.Total)
-		}
-	})
+	// CountTokens test removed in T036A-1
 
 	t.Run("GetterMethods", func(t *testing.T) {
 		// Test default implementations

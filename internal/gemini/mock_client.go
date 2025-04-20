@@ -7,9 +7,8 @@ import (
 
 // MockClient implements Client interface for testing
 type MockClient struct {
-	GenerateContentFunc    func(ctx context.Context, prompt string, params map[string]interface{}) (*GenerationResult, error)
-	CountTokensFunc        func(ctx context.Context, prompt string) (*TokenCount, error)
-	GetModelInfoFunc       func(ctx context.Context) (*ModelInfo, error)
+	GenerateContentFunc func(ctx context.Context, prompt string, params map[string]interface{}) (*GenerationResult, error)
+	// CountTokensFunc and GetModelInfoFunc removed in T036A-1
 	GetModelNameFunc       func() string
 	GetTemperatureFunc     func() float32
 	GetMaxOutputTokensFunc func() int32
@@ -25,25 +24,7 @@ func (m *MockClient) GenerateContent(ctx context.Context, prompt string, params 
 	return &GenerationResult{Content: "Mock response"}, nil
 }
 
-// CountTokens calls the mocked implementation
-func (m *MockClient) CountTokens(ctx context.Context, prompt string) (*TokenCount, error) {
-	if m.CountTokensFunc != nil {
-		return m.CountTokensFunc(ctx, prompt)
-	}
-	return &TokenCount{Total: 10}, nil // Simple default
-}
-
-// GetModelInfo calls the mocked implementation
-func (m *MockClient) GetModelInfo(ctx context.Context) (*ModelInfo, error) {
-	if m.GetModelInfoFunc != nil {
-		return m.GetModelInfoFunc(ctx)
-	}
-	return &ModelInfo{
-		Name:             "mock-model",
-		InputTokenLimit:  32000,
-		OutputTokenLimit: 8192,
-	}, nil
-}
+// CountTokens and GetModelInfo methods removed in T036A-1
 
 // Close calls the mocked implementation
 func (m *MockClient) Close() error {
@@ -87,13 +68,5 @@ func (m *MockClient) GetTopP() float32 {
 
 // NewMockClient creates a new mock client for testing
 func NewMockClient() *MockClient {
-	return &MockClient{
-		GetModelInfoFunc: func(ctx context.Context) (*ModelInfo, error) {
-			return &ModelInfo{
-				Name:             "mock-model",
-				InputTokenLimit:  32000,
-				OutputTokenLimit: 8192,
-			}, nil
-		},
-	}
+	return &MockClient{}
 }

@@ -82,9 +82,7 @@ func TestNewDefaultCliConfig(t *testing.T) {
 		t.Errorf("Expected APIEndpoint to be empty, got %q", cfg.APIEndpoint)
 	}
 
-	if cfg.ConfirmTokens != 0 {
-		t.Errorf("Expected ConfirmTokens to be 0, got %d", cfg.ConfirmTokens)
-	}
+	// ConfirmTokens check removed as part of T032E token management refactoring
 
 	// Test for slice creation (slices are reference types in Go, so modifying a
 	// slice does affect the original - we just want to ensure the slice is created)
@@ -118,9 +116,7 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("Expected LogLevel to be %v, got %v", logutil.InfoLevel, cfg.LogLevel)
 	}
 
-	if cfg.ConfirmTokens != 0 {
-		t.Errorf("Expected ConfirmTokens to be 0, got %d", cfg.ConfirmTokens)
-	}
+	// ConfirmTokens check removed as part of T032E token management refactoring
 
 	// Verify nested ExcludeConfig values
 	if cfg.Excludes.Extensions != DefaultExcludes {

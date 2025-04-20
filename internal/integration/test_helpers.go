@@ -16,11 +16,166 @@ import (
 	"github.com/phrazzld/architect/internal/auditlog"
 	"github.com/phrazzld/architect/internal/config"
 	"github.com/phrazzld/architect/internal/gemini"
+	"github.com/phrazzld/architect/internal/llm"
 	"github.com/phrazzld/architect/internal/logutil"
 )
 
 // stdinMutex protects access to os.Stdin across parallel tests
 var stdinMutex sync.Mutex
+
+// OpenAIMock provides a mock implementation of OpenAI client for testing
+type OpenAIMock struct {
+	// Mock function for OpenAI chat completion
+	ChatCompletionFunc func(ctx context.Context, request ChatCompletionParams) (*ChatCompletionResponse, error)
+
+	// Optional model info for testing
+	ModelInfoFunc func(ctx context.Context) (*ModelInfo, error)
+
+	// Token counting for testing
+	CountTokensFunc func(ctx context.Context, text string) (*TokenCount, error)
+}
+
+// ChatCompletionResponse is a simplified version for testing
+type ChatCompletionResponse struct {
+	ID      string
+	Object  string
+	Created int64
+	Model   string
+	Choices []ChatCompletionChoice
+	Usage   Usage
+}
+
+// ChatCompletionChoice represents a completion choice in the response
+type ChatCompletionChoice struct {
+	Index        int
+	Message      ChatMessage
+	FinishReason string
+}
+
+// ChatMessage represents a message in a chat conversation
+type ChatMessage struct {
+	Role    string
+	Content string
+}
+
+// Usage contains token usage information
+type Usage struct {
+	PromptTokens     int
+	CompletionTokens int
+	TotalTokens      int
+}
+
+// ChatCompletionParams for requests
+type ChatCompletionParams struct {
+	Model       string
+	Messages    []ChatMessage
+	Temperature float32
+	MaxTokens   int
+}
+
+// TokenCount represents token count information
+type TokenCount struct {
+	TotalTokens int
+}
+
+// ModelInfo represents model capabilities and limits
+type ModelInfo struct {
+	Name             string
+	InputTokenLimit  int
+	OutputTokenLimit int
+}
+
+// OpenRouterMock provides a mock implementation of OpenRouter client for testing
+type OpenRouterMock struct {
+	// Mock function for OpenRouter completion
+	CompletionFunc func(ctx context.Context, params map[string]interface{}) (*OpenRouterCompletionResponse, error)
+
+	// Token counting for testing
+	CountTokensFunc func(ctx context.Context, text string) (*TokenCount, error)
+
+	// Model info for testing
+	GetModelInfoFunc func(ctx context.Context) (*OpenRouterModelInfo, error)
+}
+
+// OpenRouterCompletionResponse is a simplified response for testing
+type OpenRouterCompletionResponse struct {
+	ID      string
+	Object  string
+	Created int64
+	Model   string
+	Choices []OpenRouterCompletionChoice
+}
+
+// OpenRouterCompletionChoice represents a choice in the completion response
+type OpenRouterCompletionChoice struct {
+	Index        int
+	Message      OpenRouterMessage
+	FinishReason string
+}
+
+// OpenRouterMessage represents a message in a chat conversation
+type OpenRouterMessage struct {
+	Role    string
+	Content string
+}
+
+// OpenRouterModelInfo represents capabilities of an OpenRouter model
+type OpenRouterModelInfo struct {
+	Name              string
+	ContextWindowSize int
+	MaxOutputTokens   int
+}
+
+// FormatAPIError creates a standardized error for OpenRouter testing
+func FormatAPIError(err error, statusCode int, details string) error {
+	if err == nil {
+		return nil
+	}
+	return llm.New("OpenRouter", "", statusCode, details, "req-123", err, llm.GetErrorCategoryFromStatusCode(statusCode))
+}
+
+// MockRegistry provides a mock implementation of registry functionality for testing
+type MockRegistry struct {
+	// Mock function for provider detection
+	DetectProviderFunc func(modelName string) (string, error)
+}
+
+// Mock for rate limiter used in tests - returns preconfigured per-provider rates
+func MockRatePerMinute(provider string) int {
+	// Return values that correspond to initialization in the test
+	switch provider {
+	case "openai":
+		return 120 // 2/sec
+	case "gemini":
+		return 180 // 3/sec
+	case "anthropic":
+		return 60 // 1/sec
+	case "openrouter":
+		return 240 // 4/sec
+	default:
+		return 120 // Default
+	}
+}
+
+// NewMockRegistry creates a new registry mock with default behavior
+func NewMockRegistry() *MockRegistry {
+	return &MockRegistry{
+		DetectProviderFunc: func(modelName string) (string, error) {
+			switch {
+			case strings.HasPrefix(modelName, "gpt-"):
+				return "openai", nil
+			case strings.HasPrefix(modelName, "gemini-"):
+				return "gemini", nil
+			case strings.HasPrefix(modelName, "claude-"):
+				return "anthropic", nil
+			case strings.HasPrefix(modelName, "openrouter/"):
+				return "openrouter", nil
+			default:
+				return "unknown", fmt.Errorf("unknown model: %s", modelName)
+			}
+		},
+	}
+}
 
 // TestEnv holds the testing environment
 type TestEnv struct {
@@ -35,8 +190,10 @@ type TestEnv struct {
 	OrigStdout *os.File
 	OrigStderr *os.File
 
-	// Mock Gemini client
-	MockClient *gemini.MockClient
+	// Mock clients for different providers
+	MockClient           *gemini.MockClient
+	MockOpenAI           *OpenAIMock
+	MockOpenRouterClient *OpenRouterMock
 
 	// Test logger
 	Logger logutil.LoggerInterface
@@ -82,6 +239,84 @@ func NewTestEnv(t *testing.T) *TestEnv {
 	// Create a mock client
 	mockClient := gemini.NewMockClient()
 
+	// Create OpenAI mock client
+	mockOpenAI := &OpenAIMock{
+		ChatCompletionFunc: func(ctx context.Context, request ChatCompletionParams) (*ChatCompletionResponse, error) {
+			return &ChatCompletionResponse{
+				ID:      "mock-response-id",
+				Object:  "chat.completion",
+				Created: time.Now().Unix(),
+				Model:   request.Model,
+				Choices: []ChatCompletionChoice{
+					{
+						Index: 0,
+						Message: ChatMessage{
+							Role:    "assistant",
+							Content: "This is a mock response from OpenAI",
+						},
+						FinishReason: "stop",
+					},
+				},
+				Usage: Usage{
+					PromptTokens:     100,
+					CompletionTokens: 50,
+					TotalTokens:      150,
+				},
+			}, nil
+		},
+		CountTokensFunc: func(ctx context.Context, text string) (*TokenCount, error) {
+			return &TokenCount{
+				TotalTokens: len(text) / 4, // Simple estimation
+			}, nil
+		},
+		ModelInfoFunc: func(ctx context.Context) (*ModelInfo, error) {
+			return &ModelInfo{
+				Name:             "gpt-test-model",
+				InputTokenLimit:  100000,
+				OutputTokenLimit: 4096,
+			}, nil
+		},
+	}
+
+	// Create OpenRouter mock client
+	mockOpenRouterClient := &OpenRouterMock{
+		CompletionFunc: func(ctx context.Context, params map[string]interface{}) (*OpenRouterCompletionResponse, error) {
+			model := "default-model"
+			if modelParam, ok := params["model"].(string); ok {
+				model = modelParam
+			}
+
+			return &OpenRouterCompletionResponse{
+				ID:      "mock-openrouter-id",
+				Object:  "chat.completion",
+				Created: time.Now().Unix(),
+				Model:   model,
+				Choices: []OpenRouterCompletionChoice{
+					{
+						Index: 0,
+						Message: OpenRouterMessage{
+							Role:    "assistant",
+							Content: "This is a mock response from OpenRouter",
+						},
+						FinishReason: "stop",
+					},
+				},
+			}, nil
+		},
+		CountTokensFunc: func(ctx context.Context, text string) (*TokenCount, error) {
+			return &TokenCount{
+				TotalTokens: len(text) / 4, // Simple estimation
+			}, nil
+		},
+		GetModelInfoFunc: func(ctx context.Context) (*OpenRouterModelInfo, error) {
+			return &OpenRouterModelInfo{
+				Name:              "openrouter-test-model",
+				ContextWindowSize: 100000,
+				MaxOutputTokens:   4096,
+			}, nil
+		},
+	}
+
 	// Create a logger that writes to the stderr buffer
 	// StderrBuffer is passed explicitly since we no longer rely on global redirection
 	logger := logutil.NewLogger(logutil.DebugLevel, stderrBuffer, "[test] ")
@@ -102,18 +337,20 @@ func NewTestEnv(t *testing.T) *TestEnv {
 	}
 
 	return &TestEnv{
-		TestDir:      testDir,
-		StdoutBuffer: stdoutBuffer,
-		StderrBuffer: stderrBuffer,
-		OrigStdout:   origStdout,
-		OrigStderr:   origStderr,
-		MockClient:   mockClient,
-		Logger:       logger,
-		AuditLogger:  auditLogger,
-		stdinReader:  r,
-		stdinWriter:  w,
-		OrigStdin:    origStdin,
-		Cleanup:      cleanup,
+		TestDir:              testDir,
+		StdoutBuffer:         stdoutBuffer,
+		StderrBuffer:         stderrBuffer,
+		OrigStdout:           origStdout,
+		OrigStderr:           origStderr,
+		MockClient:           mockClient,
+		MockOpenAI:           mockOpenAI,
+		MockOpenRouterClient: mockOpenRouterClient,
+		Logger:               logger,
+		AuditLogger:          auditLogger,
+		stdinReader:          r,
+		stdinWriter:          w,
+		OrigStdin:            origStdin,
+		Cleanup:              cleanup,
 	}
 }
 
@@ -131,6 +368,95 @@ func (env *TestEnv) Setup() {
 // Use this when you need a fresh logger that writes to the environment's buffer
 func (env *TestEnv) GetBufferedLogger(level logutil.LogLevel, prefix string) logutil.LoggerInterface {
 	return logutil.NewLogger(level, env.StderrBuffer, prefix)
+}
+
+// Reset clears the test environment for reuse
+// This is primarily used for test cleanup between subtests
+func (env *TestEnv) Reset() {
+	// Clear buffers
+	env.StdoutBuffer.Reset()
+	env.StderrBuffer.Reset()
+
+	// Reset mock clients to default behaviors
+	env.MockClient = gemini.NewMockClient()
+
+	// Reset OpenAI mock
+	env.MockOpenAI = &OpenAIMock{
+		ChatCompletionFunc: func(ctx context.Context, request ChatCompletionParams) (*ChatCompletionResponse, error) {
+			return &ChatCompletionResponse{
+				ID:      "mock-response-id",
+				Object:  "chat.completion",
+				Created: time.Now().Unix(),
+				Model:   request.Model,
+				Choices: []ChatCompletionChoice{
+					{
+						Index: 0,
+						Message: ChatMessage{
+							Role:    "assistant",
+							Content: "This is a mock response from OpenAI",
+						},
+						FinishReason: "stop",
+					},
+				},
+				Usage: Usage{
+					PromptTokens:     100,
+					CompletionTokens: 50,
+					TotalTokens:      150,
+				},
+			}, nil
+		},
+		CountTokensFunc: func(ctx context.Context, text string) (*TokenCount, error) {
+			return &TokenCount{
+				TotalTokens: len(text) / 4,
+			}, nil
+		},
+		ModelInfoFunc: func(ctx context.Context) (*ModelInfo, error) {
+			return &ModelInfo{
+				Name:             "gpt-test-model",
+				InputTokenLimit:  100000,
+				OutputTokenLimit: 4096,
+			}, nil
+		},
+	}
+
+	// Reset OpenRouter mock
+	env.MockOpenRouterClient = &OpenRouterMock{
+		CompletionFunc: func(ctx context.Context, params map[string]interface{}) (*OpenRouterCompletionResponse, error) {
+			model := "default-model"
+			if modelParam, ok := params["model"].(string); ok {
+				model = modelParam
+			}
+
+			return &OpenRouterCompletionResponse{
+				ID:      "mock-openrouter-id",
+				Object:  "chat.completion",
+				Created: time.Now().Unix(),
+				Model:   model,
+				Choices: []OpenRouterCompletionChoice{
+					{
+						Index: 0,
+						Message: OpenRouterMessage{
+							Role:    "assistant",
+							Content: "This is a mock response from OpenRouter",
+						},
+						FinishReason: "stop",
+					},
+				},
+			}, nil
+		},
+		CountTokensFunc: func(ctx context.Context, text string) (*TokenCount, error) {
+			return &TokenCount{
+				TotalTokens: len(text) / 4,
+			}, nil
+		},
+		GetModelInfoFunc: func(ctx context.Context) (*OpenRouterModelInfo, error) {
+			return &OpenRouterModelInfo{
+				Name:              "openrouter-test-model",
+				ContextWindowSize: 100000,
+				MaxOutputTokens:   4096,
+			}, nil
+		},
+	}
 }
 
 // SimulateUserInput writes data to the stdin pipe writer to simulate user input
@@ -393,12 +719,7 @@ func WithExcludeFilter(exclude string) ConfigOption {
 	}
 }
 
-// WithConfirmTokens sets the confirm tokens threshold
-func WithConfirmTokens(threshold int) ConfigOption {
-	return func(c *config.CliConfig) {
-		c.ConfirmTokens = threshold
-	}
-}
+// WithConfirmTokens removed as part of T032E - token management refactoring
 
 // WithLogLevel sets the log level
 func WithLogLevel(level logutil.LogLevel) ConfigOption {

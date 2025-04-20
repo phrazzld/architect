@@ -158,22 +158,10 @@ func TestCreateChatCompletionWithParams(t *testing.T) {
 			},
 		},
 		{
-			name: "Invalid temperature for o4-mini",
+			name: "Valid temperature - formerly model-specific validation",
 			setupClient: func(c *openaiClient) {
 				c.modelName = "o4-mini"
-				temp := 0.7 // Not 1.0, should cause an error
-				effort := "high"
-				c.temperature = &temp
-				c.reasoningEffort = &effort
-			},
-			expectError: true,
-			errorMsg:    "only supports temperature=1.0",
-		},
-		{
-			name: "Valid temperature for o4-mini",
-			setupClient: func(c *openaiClient) {
-				c.modelName = "o4-mini"
-				temp := 1.0 // Exactly 1.0, should be accepted but not included
+				temp := 0.7 // Now allowed for all models
 				effort := "high"
 				c.temperature = &temp
 				c.reasoningEffort = &effort
@@ -182,6 +170,26 @@ func TestCreateChatCompletionWithParams(t *testing.T) {
 				assert.Equal(t, "o4-mini", params.Model)
 				assert.NotEmpty(t, params.Messages)
 				assert.Equal(t, "high", string(params.ReasoningEffort))
+				// Check that temperature is set, but don't check its value
+				// as the implementation of openai.Float might change
+				assert.NotNil(t, params.Temperature)
+			},
+		},
+		{
+			name: "Temperature 1.0",
+			setupClient: func(c *openaiClient) {
+				c.modelName = "o4-mini"
+				temp := 1.0
+				effort := "high"
+				c.temperature = &temp
+				c.reasoningEffort = &effort
+			},
+			validateAPI: func(t *testing.T, params openai.ChatCompletionNewParams) {
+				assert.Equal(t, "o4-mini", params.Model)
+				assert.NotEmpty(t, params.Messages)
+				assert.Equal(t, "high", string(params.ReasoningEffort))
+				// Check that temperature is set, regardless of model
+				assert.NotNil(t, params.Temperature)
 			},
 		},
 		{

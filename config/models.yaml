@@ -33,6 +33,7 @@
 api_key_sources:
   openai: "OPENAI_API_KEY"
   gemini: "GEMINI_API_KEY"
+  openrouter: "OPENROUTER_API_KEY"
 
 # Providers
 # ---------
@@ -46,6 +47,11 @@ providers:
     # Uncomment to use a custom API endpoint:
     # base_url: "https://your-gemini-proxy.example.com/v1"
 
+  - name: openrouter
+    # Default API endpoint is https://openrouter.ai/api/v1
+    # Uncomment to use a custom API endpoint:
+    # base_url: "https://your-openrouter-proxy.example.com/api/v1"
+
 # Models
 # ------
 # Defines available LLM models with their capabilities and parameters
@@ -53,12 +59,11 @@ models:
   # OpenAI Models
   # -------------
 
-  # GPT-4 Turbo - The most capable OpenAI model with 128k context window
-  - name: gpt-4-turbo
+  - name: gpt-4.1
     provider: openai
-    api_model_id: gpt-4-turbo-2024-04-09  # Always specify exact model version when available
-    context_window: 128000  # 128k tokens total context
-    max_output_tokens: 4096  # Maximum output size
+    api_model_id: gpt-4.1
+    context_window: 1000000
+    max_output_tokens: 200000
     parameters:
       temperature:
         type: float
@@ -73,16 +78,15 @@ models:
         type: float
         default: 0.0
 
-  # O4-Mini - Newer model with medium context size and better performance than previous versions
   - name: o4-mini
     provider: openai
-    api_model_id: o4-mini-2024-07-18  # Update this ID as newer versions are released
-    context_window: 64000  # 64k token context window
-    max_output_tokens: 4096
+    api_model_id: o4-mini
+    context_window: 200000
+    max_output_tokens: 200000
     parameters:
       temperature:
         type: float
-        default: 0.7
+        default: 1.0
       top_p:
         type: float
         default: 1.0
@@ -97,90 +101,13 @@ models:
         default:
           effort: "high"
 
-  # GPT-4.1 - Next generation model with improved reasoning capabilities
-  - name: gpt-4.1
-    provider: openai
-    api_model_id: gpt-4.1-preview  # Use preview tag for pre-release models
-    context_window: 128000  # Match announced context size
-    max_output_tokens: 4096
-    parameters:
-      temperature:
-        type: float
-        default: 0.7
-      top_p:
-        type: float
-        default: 1.0
-      frequency_penalty:
-        type: float
-        default: 0.0
-      presence_penalty:
-        type: float
-        default: 0.0
-
-  - name: gpt-4o
-    provider: openai
-    api_model_id: gpt-4o
-    context_window: 128000
-    max_output_tokens: 4096
-    parameters:
-      temperature:
-        type: float
-        default: 0.7
-      top_p:
-        type: float
-        default: 1.0
-      frequency_penalty:
-        type: float
-        default: 0.0
-      presence_penalty:
-        type: float
-        default: 0.0
-
-  - name: gpt-4
-    provider: openai
-    api_model_id: gpt-4
-    context_window: 8192
-    max_output_tokens: 2048
-    parameters:
-      temperature:
-        type: float
-        default: 0.7
-      top_p:
-        type: float
-        default: 1.0
-      frequency_penalty:
-        type: float
-        default: 0.0
-      presence_penalty:
-        type: float
-        default: 0.0
-
-  - name: gpt-3.5-turbo
-    provider: openai
-    api_model_id: gpt-3.5-turbo
-    context_window: 16385
-    max_output_tokens: 4096
-    parameters:
-      temperature:
-        type: float
-        default: 0.7
-      top_p:
-        type: float
-        default: 1.0
-      frequency_penalty:
-        type: float
-        default: 0.0
-      presence_penalty:
-        type: float
-        default: 0.0
-
   # Gemini Models
   # -------------
-  - name: gemini-1.5-pro
+  - name: gemini-2.5-pro-preview-03-25
     provider: gemini
-    api_model_id: gemini-1.5-pro
-    context_window: 1000000  # 1M tokens
-    max_output_tokens: 8192
+    api_model_id: gemini-2.5-pro-preview-03-25
+    context_window: 1000000
+    max_output_tokens: 65000
     parameters:
       temperature:
         type: float
@@ -192,27 +119,11 @@ models:
         type: int
         default: 40
 
-  - name: gemini-1.5-flash
+  - name: gemini-2.5-flash-preview-04-17
     provider: gemini
-    api_model_id: gemini-1.5-flash
-    context_window: 1000000  # 1M tokens
-    max_output_tokens: 8192
-    parameters:
-      temperature:
-        type: float
-        default: 0.7
-      top_p:
-        type: float
-        default: 0.95
-      top_k:
-        type: int
-        default: 40
-
-  - name: gemini-1.0-pro
-    provider: gemini
-    api_model_id: gemini-1.0-pro
-    context_window: 32768
-    max_output_tokens: 8192
+    api_model_id: gemini-2.5-flash-preview-04-17
+    context_window: 1000000
+    max_output_tokens: 65000
     parameters:
       temperature:
         type: float
@@ -281,6 +192,50 @@ models:
   #       type: float
   #       default: 0.9
 
+  # OpenRouter Models
+  # ----------------
+  # OpenRouter provides a unified gateway to access models from various providers
+  # Model IDs use the format: provider/model-name
+
+  - name: openrouter/deepseek/deepseek-chat-v3-0324
+    provider: openrouter
+    api_model_id: deepseek/deepseek-chat-v3-0324
+    context_window: 65536  # 64k tokens
+    max_output_tokens: 8192
+    parameters:
+      temperature:
+        type: float
+        default: 0.7
+      top_p:
+        type: float
+        default: 0.95
+
+  - name: openrouter/deepseek/deepseek-r1
+    provider: openrouter
+    api_model_id: deepseek/deepseek-r1
+    context_window: 131072  # 128k tokens
+    max_output_tokens: 33792
+    parameters:
+      temperature:
+        type: float
+        default: 0.7
+      top_p:
+        type: float
+        default: 0.95
+
+  - name: openrouter/x-ai/grok-3-beta
+    provider: openrouter
+    api_model_id: x-ai/grok-3-beta
+    context_window: 131072  # 131k tokens
+    max_output_tokens: 131072
+    parameters:
+      temperature:
+        type: float
+        default: 0.7
+      top_p:
+        type: float
+        default: 0.95
+
 # Installation and Configuration Instructions
 # --------------------------------------
 # To install this configuration file:
@@ -294,6 +249,7 @@ models:
 # 3. Set your API keys as environment variables:
 #    export OPENAI_API_KEY="your-openai-api-key"
 #    export GEMINI_API_KEY="your-gemini-api-key"
+#    export OPENROUTER_API_KEY="your-openrouter-api-key"
 #
 # 4. (Optional) Add the exports to your shell profile for persistence
 #

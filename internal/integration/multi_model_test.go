@@ -21,11 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Define a type for the context key to avoid string collisions
-type contextKey string
-
-// Define a constant for the model name key
-const modelNameKey contextKey = "current_model"
+// Use the shared ContextKey and ModelNameKey from test_utils.go
 
 // mockModelTrackingAPIService extends mockIntAPIService to track model names
 type mockModelTrackingAPIService struct {
@@ -37,7 +33,7 @@ type mockModelTrackingAPIService struct {
 // InitLLMClient returns a mock LLM client and stores model name in context
 func (s *mockModelTrackingAPIService) InitLLMClient(ctx context.Context, apiKey, modelName, apiEndpoint string) (llm.LLMClient, error) {
 	// Create a new context with the model name
-	ctx = context.WithValue(ctx, modelNameKey, modelName)
+	ctx = context.WithValue(ctx, ModelNameKey, modelName)
 
 	// If a specific mock LLM client was provided, use it
 	if s.mockLLMClient != nil {
@@ -252,7 +248,7 @@ func TestMultiModelFeatures(t *testing.T) {
 			configureMock: func(t *testing.T, env *TestEnv, modelData *modelProcessingData) {
 				env.MockClient.GenerateContentFunc = func(ctx context.Context, prompt string, params map[string]interface{}) (*gemini.GenerationResult, error) {
 					// Extract the model name from the context
-					modelName := ctx.Value(modelNameKey).(string)
+					modelName := ctx.Value(ModelNameKey).(string)
 
 					// Use mutex to protect concurrent map access
 					modelData.Lock()
@@ -310,7 +306,7 @@ func TestMultiModelFeatures(t *testing.T) {
 			configureMock: func(t *testing.T, env *TestEnv, modelData *modelProcessingData) {
 				env.MockClient.GenerateContentFunc = func(ctx context.Context, prompt string, params map[string]interface{}) (*gemini.GenerationResult, error) {
 					// Extract the model name
-					modelName := ctx.Value(modelNameKey).(string)
+					modelName := ctx.Value(ModelNameKey).(string)
 
 					// Protect concurrent map access
 					modelData.Lock()
@@ -397,7 +393,7 @@ func TestMultiModelFeatures(t *testing.T) {
 			configureMock: func(t *testing.T, env *TestEnv, modelData *modelProcessingData) {
 				env.MockClient.GenerateContentFunc = func(ctx context.Context, prompt string, params map[string]interface{}) (*gemini.GenerationResult, error) {
 					// Extract the model name from the context
-					modelName := ctx.Value(modelNameKey).(string)
+					modelName := ctx.Value(ModelNameKey).(string)
 
 					// Record that this model started processing
 					modelData.Lock()
@@ -471,7 +467,7 @@ func TestMultiModelFeatures(t *testing.T) {
 			configureMock: func(t *testing.T, env *TestEnv, modelData *modelProcessingData) {
 				env.MockClient.GenerateContentFunc = func(ctx context.Context, prompt string, params map[string]interface{}) (*gemini.GenerationResult, error) {
 					// Extract the model name from context
-					modelName := ctx.Value(modelNameKey).(string)
+					modelName := ctx.Value(ModelNameKey).(string)
 
 					// Record that this model started processing
 					modelData.Lock()
@@ -560,7 +556,7 @@ func TestMultiModelFeatures(t *testing.T) {
 			configureMock: func(t *testing.T, env *TestEnv, modelData *modelProcessingData) {
 				env.MockClient.GenerateContentFunc = func(ctx context.Context, prompt string, params map[string]interface{}) (*gemini.GenerationResult, error) {
 					// Extract the model name from the context
-					modelName := ctx.Value(modelNameKey).(string)
+					modelName := ctx.Value(ModelNameKey).(string)
 
 					// Record start time
 					startTime := time.Now()

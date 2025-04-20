@@ -26,8 +26,6 @@ models:
   - name: gpt-4-turbo
     provider: openai
     api_model_id: gpt-4-turbo-preview
-    context_window: 128000
-    max_output_tokens: 4096
     parameters:
       temperature:
         type: float
@@ -52,8 +50,6 @@ models:
   - name: gemini-1.5-pro
     provider: gemini
     api_model_id: gemini-1.5-pro-latest
-    context_window: 1000000
-    max_output_tokens: 8192
     parameters:
       temperature:
         type: float
@@ -107,9 +103,7 @@ models:
 	gptModel := config.Models[0]
 	if gptModel.Name != "gpt-4-turbo" ||
 		gptModel.Provider != "openai" ||
-		gptModel.APIModelID != "gpt-4-turbo-preview" ||
-		gptModel.ContextWindow != 128000 ||
-		gptModel.MaxOutputTokens != 4096 {
+		gptModel.APIModelID != "gpt-4-turbo-preview" {
 		t.Errorf("GPT model not parsed correctly: %+v", gptModel)
 	}
 
@@ -157,9 +151,7 @@ models:
 	geminiModel := config.Models[1]
 	if geminiModel.Name != "gemini-1.5-pro" ||
 		geminiModel.Provider != "gemini" ||
-		geminiModel.APIModelID != "gemini-1.5-pro-latest" ||
-		geminiModel.ContextWindow != 1000000 ||
-		geminiModel.MaxOutputTokens != 8192 {
+		geminiModel.APIModelID != "gemini-1.5-pro-latest" {
 		t.Errorf("Gemini model not parsed correctly: %+v", geminiModel)
 	}
 
@@ -190,11 +182,9 @@ func TestMarshalingAndUnmarshaling(t *testing.T) {
 		},
 		Models: []ModelDefinition{
 			{
-				Name:            "test-model",
-				Provider:        "test-provider",
-				APIModelID:      "test-model-v1",
-				ContextWindow:   4096,
-				MaxOutputTokens: 1024,
+				Name:       "test-model",
+				Provider:   "test-provider",
+				APIModelID: "test-model-v1",
 				Parameters: map[string]ParameterDefinition{
 					"test-param": {
 						Type:       "string",
@@ -249,9 +239,7 @@ func TestMarshalingAndUnmarshaling(t *testing.T) {
 
 	if newModel.Name != origModel.Name ||
 		newModel.Provider != origModel.Provider ||
-		newModel.APIModelID != origModel.APIModelID ||
-		newModel.ContextWindow != origModel.ContextWindow ||
-		newModel.MaxOutputTokens != origModel.MaxOutputTokens {
+		newModel.APIModelID != origModel.APIModelID {
 		t.Errorf("Model fields mismatch after unmarshal")
 	}
 

@@ -58,3 +58,8 @@ main
 
 # Test files
 test.txt
+
+# Development symlinks
+DEVELOPMENT_PHILOSOPHY.md
+DEVELOPMENT_PHILOSOPHY_APPENDIX_GO.md
+docs/prompts

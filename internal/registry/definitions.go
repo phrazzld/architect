@@ -16,7 +16,7 @@ type ProviderDefinition struct {
 
 // ModelDefinition represents a model entry from the configuration.
 // It contains information about a specific LLM model including its
-// capabilities, limits, and default parameters.
+// provider, API identifier, and default parameters.
 type ModelDefinition struct {
 	// Name is the user-facing alias for the model (e.g., "gpt-4-turbo")
 	Name string `yaml:"name" json:"name"`
@@ -26,12 +26,6 @@ type ModelDefinition struct {
 
 	// APIModelID is the actual ID used in API calls (e.g., "gpt-4-turbo")
 	APIModelID string `yaml:"api_model_id" json:"api_model_id"`
-
-	// ContextWindow is the maximum input tokens allowed
-	ContextWindow int32 `yaml:"context_window" json:"context_window"`
-
-	// MaxOutputTokens is the maximum output tokens allowed
-	MaxOutputTokens int32 `yaml:"max_output_tokens" json:"max_output_tokens"`
 
 	// Parameters is a map defining supported parameters for the model
 	// (e.g., temperature, top_p, reasoning_effort)

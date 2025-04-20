@@ -61,15 +61,12 @@ func (c *testLLMClient) GenerateContent(ctx context.Context, prompt string, para
 	}, nil
 }
 
-func (c *testLLMClient) CountTokens(ctx context.Context, prompt string) (*llm.ProviderTokenCount, error) {
-	return &llm.ProviderTokenCount{
-		Total: 10,
-	}, nil
+func (c *testLLMClient) CountTokens(ctx context.Context, prompt string) (int32, error) {
+	return 10, nil
 }
 
-func (c *testLLMClient) GetModelInfo(ctx context.Context) (*llm.ProviderModelInfo, error) {
-	return &llm.ProviderModelInfo{
-		Name:             c.modelName,
+func (c *testLLMClient) GetModelLimits(ctx context.Context) (*llm.ModelLimits, error) {
+	return &llm.ModelLimits{
 		InputTokenLimit:  1000,
 		OutputTokenLimit: 1000,
 	}, nil

@@ -5,7 +5,6 @@ import (
 	"context"
 
 	"github.com/phrazzld/architect/internal/llm"
-	"github.com/phrazzld/architect/internal/logutil"
 )
 
 // ModelConfig holds Gemini model configuration parameters
@@ -15,12 +14,9 @@ type ModelConfig struct {
 	TopP            float32
 }
 
-// ModelInfo holds model capabilities and limits
-type ModelInfo struct {
-	Name             string
-	InputTokenLimit  int32
-	OutputTokenLimit int32
-}
+// ModelConfig holds Gemini model configuration parameters
+// Parameters like context window size and token limits are now managed by
+// individual providers directly and not stored in client structs.
 
 // SafetyRating represents a content safety evaluation
 type SafetyRating struct {
@@ -34,14 +30,11 @@ type GenerationResult struct {
 	Content       string
 	FinishReason  string
 	SafetyRatings []SafetyRating
-	TokenCount    int32
-	Truncated     bool
+	// TokenCount field removed in T036A-1
+	Truncated bool
 }
 
-// TokenCount holds the result of a token counting operation
-type TokenCount struct {
-	Total int32
-}
+// TokenCount struct removed in T036A-1
 
 // Client defines the interface for interacting with Gemini API
 // This interface is maintained for backward compatibility
@@ -51,11 +44,8 @@ type Client interface {
 	// If params is provided, these parameters will override the default model parameters
 	GenerateContent(ctx context.Context, prompt string, params map[string]interface{}) (*GenerationResult, error)
 
-	// CountTokens counts the tokens in a given prompt
-	CountTokens(ctx context.Context, prompt string) (*TokenCount, error)
-
-	// GetModelInfo retrieves information about a model
-	GetModelInfo(ctx context.Context) (*ModelInfo, error)
+	// CountTokens and GetModelInfo methods removed in T036A-1
+	// Token handling is now managed by individual providers directly
 
 	// GetModelName returns the name of the model being used
 	GetModelName() string
@@ -76,21 +66,10 @@ type Client interface {
 // ClientOption defines a function that modifies a client
 type ClientOption func(interface{})
 
-// WithHTTPClient allows injecting a custom HTTP client
-func WithHTTPClient(client HTTPClient) ClientOption {
+// WithHTTPClient is kept for backward compatibility but no longer does anything
+func WithHTTPClient(client interface{}) ClientOption {
 	return func(c interface{}) {
-		if gc, ok := c.(*geminiClient); ok {
-			gc.httpClient = client
-		}
-	}
-}
-
-// WithLogger allows injecting a custom logger
-func WithLogger(logger logutil.LoggerInterface) ClientOption {
-	return func(c interface{}) {
-		if gc, ok := c.(*geminiClient); ok {
-			gc.logger = logger
-		}
+		// No-op - HTTP client is no longer used for token counting since that functionality has been removed
 	}
 }
 
@@ -112,8 +91,25 @@ func NewClient(ctx context.Context, apiKey, modelName, apiEndpoint string, opts 
 		return nil, err
 	}
 
-	// Wrap it in a ClientAdapter for backward compatibility
-	return NewClientAdapter(llmClient), nil
+	// Create a mock client adapter for backward compatibility
+	return &MockClient{
+		GenerateContentFunc: func(ctx context.Context, prompt string, params map[string]interface{}) (*GenerationResult, error) {
+			// Call through to the LLM client
+			result, err := llmClient.GenerateContent(ctx, prompt, params)
+			if err != nil {
+				return nil, err
+			}
+			// Convert to legacy format
+			return &GenerationResult{
+				Content:       result.Content,
+				FinishReason:  result.FinishReason,
+				SafetyRatings: nil, // Safety info conversion would go here if needed
+				Truncated:     result.Truncated,
+			}, nil
+		},
+		GetModelNameFunc: llmClient.GetModelName,
+		CloseFunc:        llmClient.Close,
+	}, nil
 }
 
 // NewLLMClient creates a new Gemini client implementing the provider-agnostic llm.LLMClient interface

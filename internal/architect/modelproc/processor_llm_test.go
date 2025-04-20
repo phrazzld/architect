@@ -93,8 +93,6 @@ func TestModelProcessor_Process_WithLLMClient(t *testing.T) {
 
 	// Verify audit log entries
 	expectedOperations := []string{
-		"CheckTokensStart",
-		"CheckTokens",
 		"GenerateContentStart",
 		"GenerateContentEnd",
 		"SaveOutputStart",
@@ -115,13 +113,10 @@ func TestModelProcessor_Process_WithLLMClient(t *testing.T) {
 // TestModelProcessor_Process_UseTokenManagerWithLLMClient specifically tests that
 // token management in the processor uses the LLMClient interface correctly.
 func TestModelProcessor_Process_UseTokenManagerWithLLMClient(t *testing.T) {
-	// Create a mock LLM client that counts calls to different methods
-	getModelInfoCalled := false
-	countTokensCalled := false
+	// Create a mock LLM client
 	mockLLM := &mockLLMClient{
 		getModelNameFunc: func() string { return "test-model" },
 		getModelInfoFunc: func(ctx context.Context) (*llm.ProviderModelInfo, error) {
-			getModelInfoCalled = true
 			return &llm.ProviderModelInfo{
 				Name:             "test-model",
 				InputTokenLimit:  1000,
@@ -129,7 +124,6 @@ func TestModelProcessor_Process_UseTokenManagerWithLLMClient(t *testing.T) {
 			}, nil
 		},
 		countTokensFunc: func(ctx context.Context, prompt string) (*llm.ProviderTokenCount, error) {
-			countTokensCalled = true
 			return &llm.ProviderTokenCount{
 				Total: 100,
 			}, nil
@@ -190,14 +184,8 @@ func TestModelProcessor_Process_UseTokenManagerWithLLMClient(t *testing.T) {
 		t.Errorf("Expected no error, got %v", err)
 	}
 
-	// Verify that token management methods were called
-	if !getModelInfoCalled {
-		t.Errorf("Expected GetModelInfo to be called, but it wasn't")
-	}
-
-	if !countTokensCalled {
-		t.Errorf("Expected CountTokens to be called, but it wasn't")
-	}
+	// As of T032B, token validation is removed, so we no longer expect these methods to be called
+	// The test now just verifies that the processor can successfully complete without token validation
 }
 
 // TestModelProcessor_Process_UsesLLMClientExclusively tests that the ModelProcessor

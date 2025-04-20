@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
+	"sync"
 
 	"github.com/phrazzld/architect/internal/gemini"
 	"github.com/phrazzld/architect/internal/llm"
@@ -13,9 +13,10 @@ import (
 	"github.com/phrazzld/architect/internal/providers"
 )
 
-// GeminiProvider implements the Provider interface for Google's Gemini models.
+// GeminiProvider implements the Provider interface for Gemini models.
 type GeminiProvider struct {
 	logger logutil.LoggerInterface
+	apiKey string
 }
 
 // NewProvider creates a new instance of GeminiProvider.
@@ -39,51 +40,31 @@ func (p *GeminiProvider) CreateClient(
 ) (llm.LLMClient, error) {
 	p.logger.Debug("Creating Gemini client for model: %s", modelID)
 
-	// For Gemini, we should prioritize GEMINI_API_KEY environment variable
-	// for consistency across the application
+	// Use provided API key first
+	effectiveAPIKey := apiKey
 
-	// Initialize the effective API key variable
-	var effectiveAPIKey string
-
-	// Check if the provided API key looks like a valid Gemini/Google key
-	if apiKey != "" && strings.HasPrefix(apiKey, "AIza") {
-		// Use the provided key since it looks like a valid Gemini key
-		effectiveAPIKey = apiKey
-		p.logger.Debug("Using provided API key which matches Gemini key format")
-	} else {
-		// Try GEMINI_API_KEY first, then GOOGLE_API_KEY as fallback
-		effectiveAPIKey = os.Getenv("GEMINI_API_KEY")
+	// If none provided, try environment variable
+	if effectiveAPIKey == "" {
+		effectiveAPIKey = os.Getenv("GOOGLE_API_KEY")
 		if effectiveAPIKey == "" {
-			// Try GOOGLE_API_KEY as a fallback
-			effectiveAPIKey = os.Getenv("GOOGLE_API_KEY")
-			if effectiveAPIKey == "" {
-				return nil, fmt.Errorf("no valid Gemini API key provided and neither GEMINI_API_KEY nor GOOGLE_API_KEY environment variables are set")
-			}
-			p.logger.Debug("Using API key from GOOGLE_API_KEY environment variable")
-		} else {
-			p.logger.Debug("Using API key from GEMINI_API_KEY environment variable")
+			return nil, fmt.Errorf("no API key provided and GOOGLE_API_KEY environment variable not set")
 		}
-
-		// Verify this looks like a Gemini key
-		if !strings.HasPrefix(effectiveAPIKey, "AIza") {
-			p.logger.Warn("Gemini API key does not have expected format (should start with 'AIza'). This will likely fail.")
-		}
+		p.logger.Debug("Using API key from GOOGLE_API_KEY environment variable")
+	} else {
+		p.logger.Debug("Using provided API key")
 	}
 
-	// Create a list of client options
-	var clientOpts []gemini.ClientOption
+	// Store API key for later use
+	p.apiKey = effectiveAPIKey
 
-	// Add custom logger to client options
-	clientOpts = append(clientOpts, gemini.WithLogger(p.logger))
-
-	// Create the LLM client using the existing Gemini implementation
-	client, err := gemini.NewLLMClient(ctx, effectiveAPIKey, modelID, apiEndpoint, clientOpts...)
+	// Create the client using the Gemini implementation
+	baseClient, err := gemini.NewLLMClient(ctx, effectiveAPIKey, modelID, apiEndpoint)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Gemini client: %w", err)
 	}
 
 	// Wrap the client in our parameter-aware adapter
-	return NewGeminiClientAdapter(client), nil
+	return NewGeminiClientAdapter(baseClient), nil
 }
 
 // GeminiClientAdapter wraps the standard Gemini client to provide
@@ -91,6 +72,7 @@ func (p *GeminiProvider) CreateClient(
 type GeminiClientAdapter struct {
 	client llm.LLMClient
 	params map[string]interface{}
+	mu     sync.RWMutex
 }
 
 // NewGeminiClientAdapter creates a new adapter for the Gemini client
@@ -98,49 +80,65 @@ func NewGeminiClientAdapter(client llm.LLMClient) *GeminiClientAdapter {
 	return &GeminiClientAdapter{
 		client: client,
 		params: make(map[string]interface{}),
+		mu:     sync.RWMutex{},
 	}
 }
 
 // SetParameters sets the parameters to use for API calls
 func (a *GeminiClientAdapter) SetParameters(params map[string]interface{}) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	a.params = params
 }
 
 // GenerateContent implements the llm.LLMClient interface and applies parameters
 func (a *GeminiClientAdapter) GenerateContent(ctx context.Context, prompt string, params map[string]interface{}) (*llm.ProviderResult, error) {
-	// Apply parameters to underlying gemini client
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	// Apply parameters if provided
 	if len(params) > 0 {
-		// Store the parameters for use by the adapter
 		a.params = params
 	}
 
 	// We need to convert the generic parameters from the Registry to Gemini-specific settings
-	// We'll apply the parameters if the underlying client is a gemini.Client
+	// We'll try to apply common parameters to the underlying client if it supports them
+
+	// For Gemini adapter, we use safer type assertions with specific interfaces
+	// Since we don't control the underlying Gemini client implementation directly
+
+	// Apply temperature parameter if client supports it
 	if client, ok := a.client.(interface{ SetTemperature(temp float32) }); ok && a.params != nil {
-		// Handle temperature parameter
 		if temp, ok := a.getFloatParam("temperature"); ok {
 			client.SetTemperature(temp)
 		}
 	}
 
+	// Apply top_p parameter if client supports it
 	if client, ok := a.client.(interface{ SetTopP(topP float32) }); ok && a.params != nil {
-		// Handle top_p parameter
 		if topP, ok := a.getFloatParam("top_p"); ok {
 			client.SetTopP(topP)
 		}
 	}
 
+	// Apply top_k parameter if client supports it
+	if client, ok := a.client.(interface{ SetTopK(topK int32) }); ok && a.params != nil {
+		if topK, ok := a.getIntParam("top_k"); ok {
+			client.SetTopK(topK)
+		}
+	}
+
+	// Apply max_tokens parameter if client supports it
 	if client, ok := a.client.(interface{ SetMaxOutputTokens(tokens int32) }); ok && a.params != nil {
-		// Handle max_output_tokens parameter
-		if maxTokens, ok := a.getIntParam("max_output_tokens"); ok {
+		if maxTokens, ok := a.getIntParam("max_tokens"); ok {
+			client.SetMaxOutputTokens(maxTokens)
+		} else if maxTokens, ok := a.getIntParam("max_output_tokens"); ok {
+			// Try the Gemini-style parameter name as a fallback
 			client.SetMaxOutputTokens(maxTokens)
 		}
 	}
 
-	// Call the underlying client's implementation
-	// After updating the llm.LLMClient interface, all clients should implement
-	// the new interface with parameters. The adapter's main purpose is to convert
-	// between parameter formats and apply them to the wrapped client.
+	// Call the underlying client's implementation with combined parameters
 	return a.client.GenerateContent(ctx, prompt, a.params)
 }
 
@@ -188,43 +186,6 @@ func (a *GeminiClientAdapter) getIntParam(name string) (int32, bool) {
 		}
 	}
 	return 0, false
-}
-
-// CountTokens implements the llm.LLMClient interface
-func (a *GeminiClientAdapter) CountTokens(ctx context.Context, prompt string) (*llm.ProviderTokenCount, error) {
-	return a.client.CountTokens(ctx, prompt)
-}
-
-// GetModelInfo implements the llm.LLMClient interface and uses configuration data
-func (a *GeminiClientAdapter) GetModelInfo(ctx context.Context) (*llm.ProviderModelInfo, error) {
-	// First try to get the model info from the underlying client
-	modelInfo, err := a.client.GetModelInfo(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get the model information from registry if needed
-	// Registry integration is now complete, but we'll keep the underlying
-	// client call as a fallback for when registry data is unavailable
-	if modelInfo.InputTokenLimit == 0 {
-		// This indicates we should try using registry data, as zero is an invalid limit
-		// The TokenManager should automatically use registry data via registry_token.go
-		// when available, so we're covered for client usage inside TokenManager.
-		modelName := a.client.GetModelName()
-
-		// For now we use placeholder values that should be overridden by
-		// the registry-aware token manager if that's being used
-		if strings.HasPrefix(modelName, "gemini-1.5-") {
-			modelInfo.InputTokenLimit = 1000000 // 1M tokens for Gemini 1.5 models
-		} else if strings.HasPrefix(modelName, "gemini-1.0-") {
-			modelInfo.InputTokenLimit = 32768 // 32K for Gemini 1.0 models
-		} else {
-			// Default fallback for unknown models
-			modelInfo.InputTokenLimit = 32768
-		}
-	}
-
-	return modelInfo, nil
 }
 
 // GetModelName implements the llm.LLMClient interface

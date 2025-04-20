@@ -7,6 +7,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/phrazzld/architect/internal/llm"
 )
 
 func TestGenerateContent(t *testing.T) {
@@ -33,13 +35,13 @@ func TestGenerateContent(t *testing.T) {
 		}
 
 		// Verify it's an APIError with the correct type
-		apiErr, ok := err.(*APIError)
+		apiErr, ok := IsGeminiError(err)
 		if !ok {
-			t.Fatalf("Expected *APIError, got %T", err)
+			t.Fatalf("Expected LLMError from Gemini, got %T", err)
 		}
 
-		if apiErr.Type != ErrorTypeInvalidRequest {
-			t.Errorf("Expected error type %v, got %v", ErrorTypeInvalidRequest, apiErr.Type)
+		if GetErrorType(apiErr) != ErrorTypeInvalidRequest {
+			t.Errorf("Expected error type %d, got %d", ErrorTypeInvalidRequest, GetErrorType(apiErr))
 		}
 
 		// Verify message mentions empty prompt
@@ -60,12 +62,12 @@ func TestGenerateContent(t *testing.T) {
 		// Setup mock client that returns a specific error
 		client := &MockClient{
 			GenerateContentFunc: func(ctx context.Context, prompt string, params map[string]interface{}) (*GenerationResult, error) {
-				return nil, &APIError{
-					Original:   errors.New("API error: rate limit exceeded"),
-					Type:       ErrorTypeRateLimit,
-					Message:    "Request rate limit or quota exceeded on the Gemini API",
-					Suggestion: "Wait and try again later.",
-				}
+				return nil, CreateAPIError(
+					llm.CategoryRateLimit,
+					"Request rate limit or quota exceeded on the Gemini API",
+					errors.New("API error: rate limit exceeded"),
+					"Wait and try again later.",
+				)
 			},
 		}
 
@@ -78,13 +80,13 @@ func TestGenerateContent(t *testing.T) {
 		}
 
 		// Verify it's an APIError with the expected type
-		apiErr, ok := err.(*APIError)
+		apiErr, ok := IsGeminiError(err)
 		if !ok {
-			t.Fatalf("Expected *APIError, got %T", err)
+			t.Fatalf("Expected LLMError from Gemini, got %T", err)
 		}
 
-		if apiErr.Type != ErrorTypeRateLimit {
-			t.Errorf("Expected error type %v, got %v", ErrorTypeRateLimit, apiErr.Type)
+		if GetErrorType(apiErr) != ErrorTypeRateLimit {
+			t.Errorf("Expected error type %d, got %d", ErrorTypeRateLimit, GetErrorType(apiErr))
 		}
 
 		// Result should be nil
@@ -105,8 +107,8 @@ func TestGenerateContent(t *testing.T) {
 					Blocked:  false,
 				},
 			},
-			TokenCount: 42,
-			Truncated:  false,
+			// TokenCount field removed in T036A-1
+			Truncated: false,
 		}
 
 		client := &MockClient{

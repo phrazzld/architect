@@ -10,6 +10,7 @@ import (
 
 	"github.com/phrazzld/architect/internal/config"
 	"github.com/phrazzld/architect/internal/logutil"
+	"github.com/phrazzld/architect/internal/registry"
 )
 
 // stringSliceFlag is a slice of strings that implements flag.Value interface
@@ -64,16 +65,58 @@ func ValidateInputsWithEnv(config *config.CliConfig, logger logutil.LoggerInterf
 	// Check for API key based on model configuration
 	modelNeedsOpenAIKey := false
 	modelNeedsGeminiKey := false
+	modelNeedsOpenRouterKey := false
 
-	// Check if any model is OpenAI or Gemini
-	for _, model := range config.ModelNames {
-		if strings.HasPrefix(strings.ToLower(model), "gpt-") ||
-			strings.HasPrefix(strings.ToLower(model), "text-") ||
-			strings.Contains(strings.ToLower(model), "openai") {
-			modelNeedsOpenAIKey = true
-		} else {
-			// Default to Gemini for any other model
-			modelNeedsGeminiKey = true
+	// Check models using registry if available
+	regManager := registry.GetGlobalManager(nil)
+
+	// Use registry for provider detection if available
+	if regManager != nil {
+		for _, model := range config.ModelNames {
+			// Use the registry to determine the provider
+			provider, err := regManager.GetProviderForModel(model)
+			if err != nil {
+				// If model not found in registry, fallback to string matching
+				logger.Debug("Model %s not found in registry, using string matching fallback", model)
+				if strings.HasPrefix(strings.ToLower(model), "gpt-") ||
+					strings.HasPrefix(strings.ToLower(model), "text-") ||
+					strings.Contains(strings.ToLower(model), "openai") {
+					modelNeedsOpenAIKey = true
+				} else if strings.Contains(strings.ToLower(model), "openrouter") {
+					modelNeedsOpenRouterKey = true
+				} else {
+					// Default to Gemini for any other model
+					modelNeedsGeminiKey = true
+				}
+				continue
+			}
+
+			// Set flag based on provider
+			switch provider {
+			case "openai":
+				modelNeedsOpenAIKey = true
+			case "openrouter":
+				modelNeedsOpenRouterKey = true
+			case "gemini":
+				modelNeedsGeminiKey = true
+			default:
+				logger.Warn("Unknown provider %s for model %s", provider, model)
+			}
+		}
+	} else {
+		// Registry not available, use string matching fallback
+		logger.Debug("Registry not available, using string matching fallback for model detection")
+		for _, model := range config.ModelNames {
+			if strings.HasPrefix(strings.ToLower(model), "gpt-") ||
+				strings.HasPrefix(strings.ToLower(model), "text-") ||
+				strings.Contains(strings.ToLower(model), "openai") {
+				modelNeedsOpenAIKey = true
+			} else if strings.Contains(strings.ToLower(model), "openrouter") {
+				modelNeedsOpenRouterKey = true
+			} else {
+				// Default to Gemini for any other model
+				modelNeedsGeminiKey = true
+			}
 		}
 	}
 
@@ -89,6 +132,15 @@ func ValidateInputsWithEnv(config *config.CliConfig, logger logutil.LoggerInterf
 		if openAIKey == "" {
 			logger.Error("%s environment variable not set.", openaiAPIKeyEnvVar)
 			return fmt.Errorf("openAI API key not set")
+		}
+	}
+
+	// If any OpenRouter model is used, check for OpenRouter API key
+	if modelNeedsOpenRouterKey {
+		openRouterKey := getenv("OPENROUTER_API_KEY")
+		if openRouterKey == "" {
+			logger.Error("OPENROUTER_API_KEY environment variable not set.")
+			return fmt.Errorf("openRouter API key not set")
 		}
 	}
 
@@ -121,7 +173,7 @@ func ParseFlagsWithEnv(flagSet *flag.FlagSet, args []string, getenv func(string)
 	excludeNamesFlag := flagSet.String("exclude-names", defaultExcludeNames, "Comma-separated list of file/dir names to exclude.")
 	formatFlag := flagSet.String("format", defaultFormat, "Format string for each file. Use {path} and {content}.")
 	dryRunFlag := flagSet.Bool("dry-run", false, "Show files that would be included and token count, but don't call the API.")
-	confirmTokensFlag := flagSet.Int("confirm-tokens", 0, "Prompt for confirmation if token count exceeds this value (0 = never prompt)")
+	// confirm-tokens flag removed as part of T032E - token management refactoring
 	auditLogFileFlag := flagSet.String("audit-log-file", "", "Path to write structured audit logs (JSON Lines). Disabled if empty.")
 
 	// Rate limiting flags
@@ -153,6 +205,7 @@ func ParseFlagsWithEnv(flagSet *flag.FlagSet, args []string, getenv func(string)
 		fmt.Fprintf(os.Stderr, "\nEnvironment Variables:\n")
 		fmt.Fprintf(os.Stderr, "  %s: Required for Gemini models. Your Google AI Gemini API key.\n", apiKeyEnvVar)
 		fmt.Fprintf(os.Stderr, "  %s: Required for OpenAI models. Your OpenAI API key.\n", openaiAPIKeyEnvVar)
+		fmt.Fprintf(os.Stderr, "  OPENROUTER_API_KEY: Required for OpenRouter models. Your OpenRouter API key.\n")
 	}
 
 	// Parse the flags
@@ -173,7 +226,7 @@ func ParseFlagsWithEnv(flagSet *flag.FlagSet, args []string, getenv func(string)
 	cfg.ExcludeNames = *excludeNamesFlag
 	cfg.Format = *formatFlag
 	cfg.DryRun = *dryRunFlag
-	cfg.ConfirmTokens = *confirmTokensFlag
+	// ConfirmTokens field assignment removed as part of T032E - token management refactoring
 	cfg.Paths = flagSet.Args()
 
 	// Store rate limiting configuration
